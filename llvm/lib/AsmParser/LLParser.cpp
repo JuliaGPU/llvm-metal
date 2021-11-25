@@ -1790,6 +1790,8 @@ void LLParser::parseOptionalDLLStorageClass(unsigned &Res) {
 ///   ::= 'ptx_device'
 ///   ::= 'spir_func'
 ///   ::= 'spir_kernel'
+///   ::= 'metal_func'
+///   ::= 'metal_kernel'
 ///   ::= 'x86_64_sysvcc'
 ///   ::= 'win64cc'
 ///   ::= 'webkit_jscc'
@@ -1840,6 +1842,8 @@ bool LLParser::parseOptionalCallingConv(unsigned &CC) {
   case lltok::kw_ptx_device:     CC = CallingConv::PTX_Device; break;
   case lltok::kw_spir_kernel:    CC = CallingConv::SPIR_KERNEL; break;
   case lltok::kw_spir_func:      CC = CallingConv::SPIR_FUNC; break;
+  case lltok::kw_metal_kernel:   CC = CallingConv::METAL_KERNEL; break;
+  case lltok::kw_metal_func:     CC = CallingConv::METAL_FUNC; break;
   case lltok::kw_intel_ocl_bicc: CC = CallingConv::Intel_OCL_BI; break;
   case lltok::kw_x86_64_sysvcc:  CC = CallingConv::X86_64_SysV; break;
   case lltok::kw_win64cc:        CC = CallingConv::Win64; break;

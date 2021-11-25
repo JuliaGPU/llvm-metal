@@ -27,6 +27,7 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/ADT/Triple.h"
 #include "llvm/ADT/iterator_range.h"
 #include "llvm/BinaryFormat/Dwarf.h"
 #include "llvm/Config/llvm-config.h"
@@ -321,6 +322,8 @@ static void PrintCallingConv(unsigned cc, raw_ostream &Out) {
   case CallingConv::Win64:         Out << "win64cc"; break;
   case CallingConv::SPIR_FUNC:     Out << "spir_func"; break;
   case CallingConv::SPIR_KERNEL:   Out << "spir_kernel"; break;
+  case CallingConv::METAL_FUNC:    Out << "metal_func"; break;
+  case CallingConv::METAL_KERNEL:  Out << "metal_kernel"; break;
   case CallingConv::Swift:         Out << "swiftcc"; break;
   case CallingConv::SwiftTail:     Out << "swifttailcc"; break;
   case CallingConv::X86_INTR:      Out << "x86_intrcc"; break;
@@ -3555,13 +3558,21 @@ void AssemblyWriter::printGlobal(const GlobalVariable *GV) {
   PrintVisibility(GV->getVisibility(), Out);
   PrintDLLStorageClass(GV->getDLLStorageClass(), Out);
   PrintThreadLocalModel(GV->getThreadLocalMode(), Out);
+  // Metal/AIR requires unnamed_addr to come after addrspace
+  // -> only add it here for anyone else
+  const bool is_air64 = (llvm::Triple(TheModule->getTargetTriple()).getArch() == Triple::air64);
   StringRef UA = getUnnamedAddrEncoding(GV->getUnnamedAddr());
-  if (!UA.empty())
+  if (!UA.empty() && !is_air64)
       Out << UA << ' ';
 
   if (unsigned AddressSpace = GV->getType()->getAddressSpace())
     Out << "addrspace(" << AddressSpace << ") ";
   if (GV->isExternallyInitialized()) Out << "externally_initialized ";
+
+  // insert after the addrspace for Metal/AIR
+  if (!UA.empty() && is_air64)
+      Out << UA << ' ';
+
   Out << (GV->isConstant() ? "constant " : "global ");
   TypePrinter.print(GV->getValueType(), Out);
 

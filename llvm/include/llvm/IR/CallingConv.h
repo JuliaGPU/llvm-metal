@@ -252,6 +252,12 @@ namespace CallingConv {
     /// M68k_INTR - Calling convention used for M68k interrupt routines.
     M68k_INTR = 101,
 
+    /// METAL_FUNC - Calling convention for Metal device functions (not an entry point)
+    METAL_FUNC = 102,
+
+    /// METAL_KERNEL - Calling convention for Metal compute kernel function calling convention
+    METAL_KERNEL = 103,
+
     /// The highest possible calling convention ID. Must be some 2^k - 1.
     MaxID = 1023
   };

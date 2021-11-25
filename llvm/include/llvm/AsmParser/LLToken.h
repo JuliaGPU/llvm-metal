@@ -151,6 +151,8 @@ enum Kind {
   kw_ptx_device,
   kw_spir_kernel,
   kw_spir_func,
+  kw_metal_kernel,
+  kw_metal_func,
   kw_x86_64_sysvcc,
   kw_win64cc,
   kw_webkit_jscc,
