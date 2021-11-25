@@ -49,7 +49,8 @@ template <typename ValueTy> class StringMapEntryStorage;
 class Type;
 
 enum LLVMConstants : uint32_t {
-  DEBUG_METADATA_VERSION = 3 // Current debug info version number.
+  DEBUG_METADATA_VERSION = 3, // Current debug info version number.
+  IOS_METAL_DEBUG_METADATA_VERSION = 360203
 };
 
 /// Magic number in the value profile metadata showing a target has been

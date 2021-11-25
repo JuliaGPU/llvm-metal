@@ -2421,6 +2421,7 @@ void Verifier::visitFunction(const Function &F) {
   }
   case CallingConv::AMDGPU_KERNEL:
   case CallingConv::SPIR_KERNEL:
+  case CallingConv::METAL_KERNEL:
     Assert(F.getReturnType()->isVoidTy(),
            "Calling convention requires void return type", &F);
     LLVM_FALLTHROUGH;
@@ -2431,7 +2432,8 @@ void Verifier::visitFunction(const Function &F) {
   case CallingConv::AMDGPU_CS:
     Assert(!F.hasStructRetAttr(),
            "Calling convention does not allow sret", &F);
-    if (F.getCallingConv() != CallingConv::SPIR_KERNEL) {
+    if (F.getCallingConv() != CallingConv::SPIR_KERNEL &&
+        F.getCallingConv() != CallingConv::METAL_KERNEL) {
       const unsigned StackAS = DL.getAllocaAddrSpace();
       unsigned i = 0;
       for (const Argument &Arg : F.args()) {
