@@ -569,8 +569,8 @@ bool WriteMetalLibPass::runOnModule(Module &M) {
                    entry.bitcode_data.size()));
 
     // write reflection and debug data (just ENDT right now)
-    static const auto end_tag = metallib_program_info::TAG_TYPE::END;
-    static const uint32_t tag_length = sizeof(metallib_program_info::TAG_TYPE);
+    const auto end_tag = metallib_program_info::TAG_TYPE::END;
+    const uint32_t tag_length = sizeof(metallib_program_info::TAG_TYPE);
 
     raw_string_ostream refl_stream{entry.reflection_data};
     refl_stream.write((const char *)&tag_length, sizeof(uint32_t));
@@ -625,9 +625,9 @@ bool WriteMetalLibPass::runOnModule(Module &M) {
   OS.write((const char *)&header, sizeof(metallib_version));
 
   // file length
-  static const uint64_t header_size = sizeof(metallib_header);
-  static const uint64_t initial_offset = header_size + entries_size;
-  static const uint64_t dummy_ENDT_size =
+  const uint64_t header_size = sizeof(metallib_header);
+  const uint64_t initial_offset = header_size + entries_size;
+  const uint64_t dummy_ENDT_size =
       sizeof(metallib_program_info::TAG_TYPE);
   const uint64_t file_length = initial_offset + dummy_ENDT_size +
                                reflection_data_size + debug_data_size +
