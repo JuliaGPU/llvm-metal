@@ -2110,6 +2110,13 @@ bool Type::isFloatingType() const {
   return false;
 }
 
+bool Type::isDoubleType() const {
+  if (const BuiltinType *BT = dyn_cast<BuiltinType>(CanonicalType))
+    return BT->getKind() >= BuiltinType::Double &&
+           BT->getKind() <= BuiltinType::LongDouble;
+  return false;
+}
+
 bool Type::hasFloatingRepresentation() const {
   if (const auto *VT = dyn_cast<VectorType>(CanonicalType))
     return VT->getElementType()->isFloatingType();
@@ -2130,6 +2137,30 @@ bool Type::isRealType() const {
   if (const auto *ET = dyn_cast<EnumType>(CanonicalType))
       return ET->getDecl()->isComplete() && !ET->getDecl()->isScoped();
   return isExtIntType();
+}
+
+bool Type::isFloatingVecType() const {
+  if (const VectorType *VT = dyn_cast<VectorType>(CanonicalType))
+    return VT->getElementType()->isFloatingType();
+  return false;
+}
+
+bool Type::isDoubleVecType() const {
+  if (const VectorType *VT = dyn_cast<VectorType>(CanonicalType))
+    return VT->getElementType()->isDoubleType();
+  return false;
+}
+
+bool Type::isIntegerVecType() const {
+  if (const VectorType *VT = dyn_cast<VectorType>(CanonicalType))
+    return VT->getElementType()->isIntegerType();
+  return false;
+}
+
+bool Type::isRealVecType() const {
+  if (const VectorType *VT = dyn_cast<VectorType>(CanonicalType))
+    return VT->getElementType()->isRealType();
+  return false;
 }
 
 bool Type::isArithmeticType() const {
@@ -2548,6 +2579,9 @@ QualType::isNonTrivialToPrimitiveDestructiveMove() const {
 bool Type::isLiteralType(const ASTContext &Ctx) const {
   if (isDependentType())
     return false;
+
+  if (Ctx.getLangOpts().OpenCL && isSamplerT())
+    return true;
 
   // C++1y [basic.types]p10:
   //   A type is a literal type if it is:
@@ -3069,10 +3103,17 @@ StringRef BuiltinType::getName(const PrintingPolicy &Policy) const {
     return "Class";
   case ObjCSel:
     return "SEL";
+#if 0 // TODO: enable this again when using ro/wo/rw image types
 #define IMAGE_TYPE(ImgType, Id, SingletonId, Access, Suffix) \
   case Id: \
     return "__" #Access " " #ImgType "_t";
 #include "clang/Basic/OpenCLImageTypes.def"
+#else
+#define IMAGE_TYPE(ImgType, Id, SingletonId, Access, Suffix) \
+  case Id: \
+    return #ImgType "_t";
+#include "clang/Basic/OpenCLImageTypes.def"
+#endif
   case OCLSampler:
     return "sampler_t";
   case OCLEvent:
@@ -3083,6 +3124,8 @@ StringRef BuiltinType::getName(const PrintingPolicy &Policy) const {
     return "queue_t";
   case OCLReserveID:
     return "reserve_id_t";
+  case OCLPatchControlPoint:
+    return "__patch_control_point_t";
   case IncompleteMatrixIdx:
     return "<incomplete matrix index type>";
   case OMPArraySection:
@@ -3150,8 +3193,12 @@ StringRef FunctionType::getNameForCallConv(CallingConv CC) {
   case CC_AAPCS_VFP: return "aapcs-vfp";
   case CC_AArch64VectorCall: return "aarch64_vector_pcs";
   case CC_IntelOclBicc: return "intel_ocl_bicc";
-  case CC_SpirFunction: return "spir_function";
-  case CC_OpenCLKernel: return "opencl_kernel";
+  case CC_FloorFunction: return "floor_function";
+  case CC_FloorKernel: return "floor_kernel";
+  case CC_FloorVertex: return "floor_vertex";
+  case CC_FloorFragment: return "floor_fragment";
+  case CC_FloorTessControl: return "floor_tessellation_control";
+  case CC_FloorTessEval: return "floor_tessellation_evaluation";
   case CC_Swift: return "swiftcall";
   case CC_SwiftAsync: return "swiftasynccall";
   case CC_PreserveMost: return "preserve_most";
@@ -3579,6 +3626,11 @@ bool AttributedType::isCallingConv() const {
   case attr::IntelOclBicc:
   case attr::PreserveMost:
   case attr::PreserveAll:
+  case attr::GraphicsVertexShader:
+  case attr::GraphicsFragmentShader:
+  case attr::GraphicsTessellationControlShader:
+  case attr::GraphicsTessellationEvaluationShader:
+  case attr::ComputeKernel:
     return true;
   }
   llvm_unreachable("invalid attr kind");
@@ -4125,6 +4177,7 @@ bool Type::canHaveNullability(bool ResultIfUnknown) const {
     case BuiltinType::OCLClkEvent:
     case BuiltinType::OCLQueue:
     case BuiltinType::OCLReserveID:
+    case BuiltinType::OCLPatchControlPoint:
 #define SVE_TYPE(Name, Id, SingletonId) \
     case BuiltinType::Id:
 #include "clang/Basic/AArch64SVEACLETypes.def"
@@ -4428,4 +4481,113 @@ void AutoType::Profile(llvm::FoldingSetNodeID &ID, const ASTContext &Context,
   ID.AddPointer(CD);
   for (const TemplateArgument &Arg : Arguments)
     Arg.Profile(ID, Context);
+}
+
+static std::pair<bool, bool> isAggregateImageTypeRecurse(const CXXRecordDecl* decl) {
+	if(decl == nullptr) return { false, false };
+	
+	// union is not allowed
+	if(decl->isUnion()) return { false, false };
+	
+	// must have definition
+	if(!decl->hasDefinition()) return { false, false };
+	
+	// iterate over all fields/members and check if all are image types
+	bool has_any_image = false;
+	for(const auto* field : decl->fields()) {
+		// direct image type or array thereof
+		if (!field->getType()->isImageType() &&
+			!field->getType()->isArrayImageType(false)) {
+			// ignore zero-sized fields (if there are not an image)
+			if (field->isZeroSize(decl->getASTContext())) {
+				continue;
+			}
+			return { false, false };
+		}
+		has_any_image = true;
+	}
+	
+	// iterate over / recurse into all bases, check if they only consist of image types
+	for(const auto& base : decl->bases()) {
+		const auto base_ret = isAggregateImageTypeRecurse(base.getType()->getAsCXXRecordDecl());
+		if(!base_ret.first) {
+			return { false, false };
+		}
+		has_any_image |= base_ret.second;
+	}
+	
+	// all passed
+	return { true, has_any_image };
+}
+
+bool Type::isAggregateImageType() const {
+  // must be struct or class, union is not allowed
+  if(!isStructureOrClassType()) return false;
+
+  // check class/struct itself + all inherited base classes/structs
+  const auto valid_and_has_image = isAggregateImageTypeRecurse(getAsCXXRecordDecl());
+  return valid_and_has_image.first && valid_and_has_image.second;
+}
+
+bool Type::isArrayImageType(bool single_field_arr) const {
+  // only check/match this for C-style arrays of builtin images
+  if(!single_field_arr) {
+    if(isPointerType() && getPointeeType()->isArrayType()) {
+      return getPointeeType()->isArrayImageType(single_field_arr);
+    }
+
+    // simple C-style array that contains an image type
+    if(isArrayType()) {
+      return (getAsArrayTypeUnsafe()->getElementType()->isAggregateImageType() ||
+              getAsArrayTypeUnsafe()->getElementType()->isImageType());
+    }
+  }
+
+  // must be struct or class, union is not allowed
+  if(!isStructureOrClassType()) return false;
+
+  // must be a cxx rdecl
+  const auto decl = getAsCXXRecordDecl();
+  if(!decl) return false;
+
+  // must have definition
+  if(!decl->hasDefinition()) return false;
+
+  // must have at least one field
+  const auto field_count = std::distance(decl->field_begin(), decl->field_end());
+  if(field_count == 0) return false;
+
+  // handle "array of agg images" (single_field_arr == true) and "agg image with array of *images" (false)
+  if(single_field_arr) {
+    if(field_count != 1) return false;
+
+    // field must be an array
+    const QualType arr_field_type = decl->field_begin()->getType();
+    if(!arr_field_type->isArrayType()) return false;
+
+    // element type must be an aggregate image type
+    return arr_field_type->getArrayElementTypeNoTypeQual()->isAggregateImageType();
+  } else {
+    // must have an array field
+    bool has_array = false;
+    QualType arr_field_type;
+    for(const auto* field : decl->fields()) {
+      arr_field_type = field->getType();
+      has_array = arr_field_type->isArrayType();
+      if(has_array) break;
+    }
+    if(!has_array) return false;
+
+    // either the enclosing/parent type or the array field type must be an aggregate image type
+    if (arr_field_type->getArrayElementTypeNoTypeQual()->isAggregateImageType()) {
+      return true;
+    }
+    if (!arr_field_type->isStructureOrClassType()) {
+      return false;
+    }
+
+    // check if the aggregate contains an image type somewhere
+    auto st_arr_field_type = arr_field_type->getAsStructureType();
+    return st_arr_field_type->isAggregateImageType();
+  }
 }

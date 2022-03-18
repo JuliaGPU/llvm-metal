@@ -37,36 +37,95 @@ llvm::Type *CGOpenCLRuntime::convertOpenCLSpecificType(const Type *T) {
   llvm::LLVMContext& Ctx = CGM.getLLVMContext();
   uint32_t AddrSpc = CGM.getContext().getTargetAddressSpace(
       CGM.getContext().getOpenCLTypeAddrSpace(T));
-  switch (cast<BuiltinType>(T)->getKind()) {
-  default:
-    llvm_unreachable("Unexpected opencl builtin type!");
-    return nullptr;
+  if (!CGM.getLangOpts().Metal) { // OpenCL/SPIR and SPIR-V/Vulkan
+    switch (cast<BuiltinType>(T)->getKind()) {
+    default:
+      llvm_unreachable("Unexpected opencl builtin type!");
+      return nullptr;
 #define IMAGE_TYPE(ImgType, Id, SingletonId, Access, Suffix) \
-  case BuiltinType::Id: \
-    return llvm::PointerType::get( \
-        llvm::StructType::create(Ctx, "opencl." #ImgType "_" #Suffix "_t"), \
-        AddrSpc);
+    case BuiltinType::Id: \
+      return llvm::PointerType::get( \
+          llvm::StructType::create(Ctx, "opencl." #ImgType #Suffix "_t"), \
+          AddrSpc);
 #include "clang/Basic/OpenCLImageTypes.def"
-  case BuiltinType::OCLSampler:
-    return getSamplerType(T);
-  case BuiltinType::OCLEvent:
-    return llvm::PointerType::get(
-        llvm::StructType::create(Ctx, "opencl.event_t"), AddrSpc);
-  case BuiltinType::OCLClkEvent:
-    return llvm::PointerType::get(
-        llvm::StructType::create(Ctx, "opencl.clk_event_t"), AddrSpc);
-  case BuiltinType::OCLQueue:
-    return llvm::PointerType::get(
-        llvm::StructType::create(Ctx, "opencl.queue_t"), AddrSpc);
-  case BuiltinType::OCLReserveID:
-    return llvm::PointerType::get(
-        llvm::StructType::create(Ctx, "opencl.reserve_id_t"), AddrSpc);
+    case BuiltinType::OCLSampler:
+      return CGM.getLangOpts().CLSamplerOpaque ? (llvm::Type*)getSamplerType(T) : (llvm::Type*)llvm::IntegerType::get(Ctx, 32);
+    case BuiltinType::OCLEvent:
+      return llvm::PointerType::get(
+          llvm::StructType::create(Ctx, "opencl.event_t"), AddrSpc);
+    case BuiltinType::OCLClkEvent:
+      return llvm::PointerType::get(
+          llvm::StructType::create(Ctx, "opencl.clk_event_t"), AddrSpc);
+    case BuiltinType::OCLQueue:
+      return llvm::PointerType::get(
+          llvm::StructType::create(Ctx, "opencl.queue_t"), AddrSpc);
+    case BuiltinType::OCLReserveID:
+      return llvm::PointerType::get(
+          llvm::StructType::create(Ctx, "opencl.reserve_id_t"), AddrSpc);
+    case BuiltinType::OCLPatchControlPoint:
+      return llvm::PointerType::get(
+          llvm::StructType::create(Ctx, "struct._patch_control_point_t"), AddrSpc);
 #define EXT_OPAQUE_TYPE(ExtType, Id, Ext) \
-  case BuiltinType::Id: \
-    return llvm::PointerType::get( \
-        llvm::StructType::create(Ctx, "opencl." #ExtType), AddrSpc);
+    case BuiltinType::Id: \
+      return llvm::PointerType::get( \
+          llvm::StructType::create(Ctx, "opencl." #ExtType), AddrSpc);
 #include "clang/Basic/OpenCLExtensionTypes.def"
+    }
+  } else if (CGM.getLangOpts().Metal) { // Metal/AIR
+    const auto get_or_create_opaque_ptr_type = [&Ctx](const char* name, uint32_t address_space) {
+      auto opaque_type = llvm::StructType::getTypeByName(Ctx, name);
+      if (!opaque_type) {
+        opaque_type = llvm::StructType::create(Ctx, name);
+      }
+      return llvm::PointerType::get(opaque_type, address_space);
+    };
+    switch (cast<BuiltinType>(T)->getKind()) {
+      default:
+        llvm_unreachable("Unexpected metal builtin type!");
+        return nullptr;
+      case BuiltinType::OCLImage1d:
+        return get_or_create_opaque_ptr_type("struct._texture_1d_t", AddrSpc);
+      case BuiltinType::OCLImage1dArray:
+                return get_or_create_opaque_ptr_type("struct._texture_1d_array_t", AddrSpc);
+      case BuiltinType::OCLImage1dBuffer:
+        llvm_unreachable("Unsupported image type (1D-buffer is not supported by metal)!");
+        return nullptr;
+      case BuiltinType::OCLImage2d:
+        return get_or_create_opaque_ptr_type("struct._texture_2d_t", AddrSpc);
+      case BuiltinType::OCLImage2dArray:
+        return get_or_create_opaque_ptr_type("struct._texture_2d_array_t", AddrSpc);
+      case BuiltinType::OCLImage2dDepth:
+        return get_or_create_opaque_ptr_type("struct._depth_2d_t", AddrSpc);
+      case BuiltinType::OCLImage2dArrayDepth:
+        return get_or_create_opaque_ptr_type("struct._depth_2d_array_t", AddrSpc);
+      case BuiltinType::OCLImage2dMSAA:
+        return get_or_create_opaque_ptr_type("struct._texture_2d_ms_t", AddrSpc);
+      case BuiltinType::OCLImage2dArrayMSAA:
+        return get_or_create_opaque_ptr_type("struct._texture_2d_ms_array_t", AddrSpc);
+      case BuiltinType::OCLImage2dMSAADepth:
+        return get_or_create_opaque_ptr_type("struct._depth_2d_ms_t", AddrSpc);
+      case BuiltinType::OCLImage2dArrayMSAADepth:
+        return get_or_create_opaque_ptr_type("struct._depth_2d_ms_array_t", AddrSpc);
+      case BuiltinType::OCLImageCube:
+        return get_or_create_opaque_ptr_type("struct._texture_cube_t", AddrSpc);
+      case BuiltinType::OCLImageCubeArray:
+        return get_or_create_opaque_ptr_type("struct._texture_cube_array_t", AddrSpc);
+      case BuiltinType::OCLImageCubeDepth:
+        return get_or_create_opaque_ptr_type("struct._depth_cube_t", AddrSpc);
+      case BuiltinType::OCLImageCubeArrayDepth:
+        return get_or_create_opaque_ptr_type("struct._depth_cube_array_t", AddrSpc);
+      case BuiltinType::OCLImage3d:
+        return get_or_create_opaque_ptr_type("struct._texture_3d_t", AddrSpc);
+      case BuiltinType::OCLSampler:
+        return get_or_create_opaque_ptr_type("struct._sampler_t", CGM.getContext().getTargetAddressSpace(LangAS::opencl_constant));
+      case BuiltinType::OCLEvent:
+        return get_or_create_opaque_ptr_type("struct._event_t", 0);
+      case BuiltinType::OCLPatchControlPoint:
+        return get_or_create_opaque_ptr_type("struct._patch_control_point_t", AddrSpc);
+    }
   }
+  llvm_unreachable("Unexpected builtin type!");
+  return nullptr;
 }
 
 llvm::Type *CGOpenCLRuntime::getPipeType(const PipeType *T) {
@@ -180,7 +239,58 @@ CGOpenCLRuntime::emitOpenCLEnqueuedBlock(CodeGenFunction &CGF, const Expr *E) {
   // The common part of the post-processing of the kernel goes here.
   F->addFnAttr(llvm::Attribute::NoUnwind);
   F->setCallingConv(
-      CGF.getTypes().ClangCallConvToLLVMCallConv(CallingConv::CC_OpenCLKernel));
+      CGF.getTypes().ClangCallConvToLLVMCallConv(CallingConv::CC_FloorKernel));
   EnqueuedBlockMap[Block].Kernel = F;
   return EnqueuedBlockMap[Block];
+}
+
+//
+// Ocl20Mangler
+//
+Ocl20Mangler::Ocl20Mangler(llvm::SmallVectorImpl<char>& SS): MangledString(&SS) {}
+
+Ocl20Mangler& Ocl20Mangler::appendReservedId() {
+  this->appendString("13ocl_reserveid");
+  return *this;
+}
+
+Ocl20Mangler& Ocl20Mangler::appendPipe() {
+  this->appendString("8ocl_pipe");
+  return *this;
+}
+
+Ocl20Mangler& Ocl20Mangler::appendInt() {
+  MangledString->push_back('i');
+  return *this;
+}
+
+Ocl20Mangler& Ocl20Mangler::appendUint() {
+  MangledString->push_back('j');
+  return *this;
+}
+
+Ocl20Mangler& Ocl20Mangler::appendVoid() {
+  MangledString->push_back('v');
+  return *this;
+}
+
+Ocl20Mangler& Ocl20Mangler::appendPointer() {
+  this->appendString("P");
+  return *this;
+}
+
+Ocl20Mangler& Ocl20Mangler::appendPointer(int addressSpace) {
+  assert(addressSpace >=0 && addressSpace <= 4 &&
+         "Illegal address space for OpenCL");
+  if (!addressSpace)
+    return appendPointer();
+
+  this->appendString("PU3AS");
+  MangledString->push_back('0' + addressSpace);
+  return *this;
+}
+
+Ocl20Mangler& Ocl20Mangler::appendString(llvm::StringRef S) {
+  MangledString->append(S.begin(), S.end());
+  return *this;
 }

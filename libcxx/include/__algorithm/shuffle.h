@@ -25,6 +25,8 @@ _LIBCPP_PUSH_MACROS
 
 _LIBCPP_BEGIN_NAMESPACE_STD
 
+
+#if 0 // this is not supported
 #if _LIBCPP_STD_VER <= 14 || defined(_LIBCPP_ENABLE_CXX17_REMOVED_RANDOM_SHUFFLE) \
   || defined(_LIBCPP_BUILDING_LIBRARY)
 class _LIBCPP_TYPE_VIS __rs_default;
@@ -97,6 +99,7 @@ random_shuffle(_RandomAccessIterator __first, _RandomAccessIterator __last,
         }
     }
 }
+#endif
 #endif
 
 template<class _RandomAccessIterator, class _UniformRandomNumberGenerator>

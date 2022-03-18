@@ -3827,7 +3827,7 @@ bool Sema::DeduceFunctionTypeFromReturnExpr(FunctionDecl *FD,
 
   // CUDA: Kernel function must have 'void' return type.
   if (getLangOpts().CUDA)
-    if (FD->hasAttr<CUDAGlobalAttr>() && !Deduced->isVoidType()) {
+    if (FD->hasAttr<ComputeKernelAttr>() && !Deduced->isVoidType()) {
       Diag(FD->getLocation(), diag::err_kern_type_not_void_return)
           << FD->getType() << FD->getSourceRange();
       return true;

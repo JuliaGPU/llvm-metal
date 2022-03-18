@@ -2392,7 +2392,7 @@ void MicrosoftCXXNameMangler::mangleType(const BuiltinType *T, Qualifiers,
 
 #define IMAGE_TYPE(ImgType, Id, SingletonId, Access, Suffix) \
   case BuiltinType::Id: \
-    Out << "PAUocl_" #ImgType "_" #Suffix "@@"; \
+    Out << "PAUocl_" #ImgType #Suffix "@@"; \
     break;
 #include "clang/Basic/OpenCLImageTypes.def"
   case BuiltinType::OCLSampler:
@@ -2414,6 +2414,10 @@ void MicrosoftCXXNameMangler::mangleType(const BuiltinType *T, Qualifiers,
   case BuiltinType::OCLReserveID:
     Out << "PA";
     mangleArtificialTagType(TTK_Struct, "ocl_reserveid");
+    break;
+  case BuiltinType::OCLPatchControlPoint:
+    Out << "PA";
+    mangleArtificialTagType(TTK_Struct, "__patch_control_point_t");
     break;
 #define EXT_OPAQUE_TYPE(ExtType, Id, Ext) \
   case BuiltinType::Id: \

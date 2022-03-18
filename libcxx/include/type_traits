@@ -444,8 +444,10 @@ struct _LIBCPP_TEMPLATE_VIS integral_constant
 #endif
 };
 
+#if 0
 template <class _Tp, _Tp __v>
-_LIBCPP_CONSTEXPR const _Tp integral_constant<_Tp, __v>::value;
+_LIBCPP_CONSTEXPR constant const _Tp integral_constant<_Tp, __v>::value;
+#endif
 
 #if _LIBCPP_STD_VER > 14
 template <bool __b>
@@ -811,6 +813,7 @@ template <> struct __libcpp_is_unsigned_integer<__uint128_t>        : public tru
 
 template <class _Tp> struct __libcpp_is_floating_point              : public false_type {};
 template <>          struct __libcpp_is_floating_point<float>       : public true_type {};
+template <>          struct __libcpp_is_floating_point<__fp16>      : public true_type {};
 template <>          struct __libcpp_is_floating_point<double>      : public true_type {};
 template <>          struct __libcpp_is_floating_point<long double> : public true_type {};
 

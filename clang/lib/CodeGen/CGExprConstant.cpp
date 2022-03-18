@@ -1098,8 +1098,14 @@ public:
     case CK_ConstructorConversion:
       return Visit(subExpr, destType);
 
-    case CK_IntToOCLSampler:
-      llvm_unreachable("global sampler variables are not generated");
+    case CK_IntToOCLSampler: {
+      auto C = Emitter.tryEmitPrivateForMemory(subExpr, subExpr->getType());
+      if (!C)
+        return nullptr;
+      if (!CGM.getLangOpts().CLSamplerOpaque)
+        return C;
+      return CGM.createIntToSamplerConversion(subExpr, Emitter.CGF);
+    }
 
     case CK_Dependent: llvm_unreachable("saw dependent cast!");
 
@@ -1170,6 +1176,8 @@ public:
     case CK_FixedPointToIntegral:
     case CK_IntegralToFixedPoint:
     case CK_ZeroToOCLOpaqueType:
+    case CK_ZeroToOCLEvent:
+    case CK_ZeroToOCLQueue:
     case CK_MatrixCast:
       return nullptr;
     }

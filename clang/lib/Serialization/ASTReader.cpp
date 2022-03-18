@@ -7016,6 +7016,9 @@ QualType ASTReader::GetType(TypeID ID) {
     case PREDEF_TYPE_RESERVE_ID_ID:
       T = Context.OCLReserveIDTy;
       break;
+    case PREDEF_TYPE_PATCH_CONTROL_POINT_ID:
+      T = Context.OCLPatchControlPointTy;
+      break;
     case PREDEF_TYPE_AUTO_DEDUCT:
       T = Context.getAutoDeductType();
       break;

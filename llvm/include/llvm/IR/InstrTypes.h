@@ -1416,23 +1416,23 @@ public:
   void setCalledOperand(Value *V) { Op<CalledOperandOpEndIdx>() = V; }
 
   /// Sets the function called, including updating the function type.
-  void setCalledFunction(Function *Fn) {
-    setCalledFunction(Fn->getFunctionType(), Fn);
+  void setCalledFunction(Function *Fn, const bool allow_type_change = false) {
+    setCalledFunction(Fn->getFunctionType(), Fn, allow_type_change);
   }
 
   /// Sets the function called, including updating the function type.
-  void setCalledFunction(FunctionCallee Fn) {
-    setCalledFunction(Fn.getFunctionType(), Fn.getCallee());
+  void setCalledFunction(FunctionCallee Fn, const bool allow_type_change = false) {
+    setCalledFunction(Fn.getFunctionType(), Fn.getCallee(), allow_type_change);
   }
 
   /// Sets the function called, including updating to the specified function
   /// type.
-  void setCalledFunction(FunctionType *FTy, Value *Fn) {
+  void setCalledFunction(FunctionType *FTy, Value *Fn, const bool allow_type_change = false) {
     this->FTy = FTy;
     assert(cast<PointerType>(Fn->getType())->isOpaqueOrPointeeTypeMatches(FTy));
     // This function doesn't mutate the return type, only the function
     // type. Seems broken, but I'm just gonna stick an assert in for now.
-    assert(getType() == FTy->getReturnType());
+    assert(allow_type_change || getType() == FTy->getReturnType());
     setCalledOperand(Fn);
   }
 

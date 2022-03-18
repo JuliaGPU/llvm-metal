@@ -3491,6 +3491,8 @@ void InitializationSequence::Step::Destroy() {
   case SK_StdInitializerListConstructorCall:
   case SK_OCLSamplerInit:
   case SK_OCLZeroOpaqueType:
+  case SK_OCLZeroEvent:
+  case SK_OCLZeroQueue:
     break;
 
   case SK_ConversionSequence:
@@ -3781,6 +3783,13 @@ void InitializationSequence::AddOCLSamplerInitStep(QualType T) {
 void InitializationSequence::AddOCLZeroOpaqueTypeStep(QualType T) {
   Step S;
   S.Kind = SK_OCLZeroOpaqueType;
+  S.Type = T;
+  Steps.push_back(S);
+}
+
+void InitializationSequence::AddOCLZeroQueueStep(QualType T) {
+  Step S;
+  S.Kind = SK_OCLZeroQueue;
   S.Type = T;
   Steps.push_back(S);
 }
@@ -4319,6 +4328,7 @@ static void TryReferenceListInitialization(Sema &S,
   }
   // Perform address space compatibility check.
   QualType cv1T1IgnoreAS = cv1T1;
+#if 0 // we don't want this
   if (T1Quals.hasAddressSpace()) {
     Qualifiers T2Quals;
     (void)S.Context.getUnqualifiedArrayType(InitList->getType(), T2Quals);
@@ -4332,6 +4342,7 @@ static void TryReferenceListInitialization(Sema &S,
     cv1T1IgnoreAS =
         S.Context.getQualifiedType(T1, T1Quals.withoutAddressSpace());
   }
+#endif
   // Not reference-related. Create a temporary and bind to that.
   InitializedEntity TempEntity =
       InitializedEntity::InitializeTemporary(cv1T1IgnoreAS);
@@ -4873,8 +4884,9 @@ static void TryReferenceInitializationCore(Sema &S,
   //       shall be an rvalue reference.
   //       For address spaces, we interpret this to mean that an addr space
   //       of a reference "cv1 T1" is a superset of addr space of "cv2 T2".
-  if (isLValueRef && !(T1Quals.hasConst() && !T1Quals.hasVolatile() &&
-                       T1Quals.isAddressSpaceSupersetOf(T2Quals))) {
+  // NOTE: we don't want the address space test here
+  if (isLValueRef && !(T1Quals.hasConst() && !T1Quals.hasVolatile() /*&&
+                       T1Quals.isAddressSpaceSupersetOf(T2Quals)*/)) {
     if (S.Context.getCanonicalType(T2) == S.Context.OverloadTy)
       Sequence.SetFailed(InitializationSequence::FK_AddressOfOverloadFailed);
     else if (ConvOvlResult && !Sequence.getFailedCandidateSet().empty())
@@ -4993,6 +5005,7 @@ static void TryReferenceInitializationCore(Sema &S,
   //         where "cv1 T1" is reference-compatible with "cv3 T3",
   //
   // DR1287 removes the "implicitly" here.
+  bool isOpenCLASRef = false;
   if (T2->isRecordType()) {
     if (RefRelationship == Sema::Ref_Incompatible) {
       ConvOvlResult = TryRefInitWithConversionFunction(
@@ -5013,8 +5026,15 @@ static void TryReferenceInitializationCore(Sema &S,
       return;
     }
 
-    Sequence.SetFailed(InitializationSequence::FK_ReferenceInitDropsQualifiers);
-    return;
+    if(S.getLangOpts().OpenCL &&
+       ((cv1T1.getAddressSpace() == LangAS::Default && cv2T2.getAddressSpace() != LangAS::Default) ||
+        (cv1T1.getAddressSpace() != LangAS::Default && cv2T2.getAddressSpace() == LangAS::Default))) {
+      isOpenCLASRef = true;
+    }
+    if(!isOpenCLASRef) {
+      Sequence.SetFailed(InitializationSequence::FK_ReferenceInitDropsQualifiers);
+      return;
+    }
   }
 
   //      - Otherwise, a temporary of type "cv1 T1" is created and initialized
@@ -5065,9 +5085,10 @@ static void TryReferenceInitializationCore(Sema &S,
   //        than, cv2; otherwise, the program is ill-formed.
   unsigned T1CVRQuals = T1Quals.getCVRQualifiers();
   unsigned T2CVRQuals = T2Quals.getCVRQualifiers();
+  // NOTE: we don't want the address space check here
   if (RefRelationship == Sema::Ref_Related &&
-      ((T1CVRQuals | T2CVRQuals) != T1CVRQuals ||
-       !T1Quals.isAddressSpaceSupersetOf(T2Quals))) {
+      ((T1CVRQuals | T2CVRQuals) != T1CVRQuals /*||
+       !T1Quals.isAddressSpaceSupersetOf(T2Quals)*/)) {
     Sequence.SetFailed(InitializationSequence::FK_ReferenceInitDropsQualifiers);
     return;
   }
@@ -5083,6 +5104,7 @@ static void TryReferenceInitializationCore(Sema &S,
 
   Sequence.AddReferenceBindingStep(cv1T1IgnoreAS, /*BindingTemporary=*/true);
 
+#if 0 // we don't want this
   if (T1Quals.hasAddressSpace()) {
     if (!Qualifiers::isAddressSpaceSupersetOf(T1Quals.getAddressSpace(),
                                               LangAS::Default)) {
@@ -5093,6 +5115,7 @@ static void TryReferenceInitializationCore(Sema &S,
     Sequence.AddQualificationConversionStep(cv1T1, isLValueRef ? VK_LValue
                                                                : VK_XValue);
   }
+#endif
 }
 
 /// Attempt character array initialization from a string literal
@@ -5635,6 +5658,20 @@ static bool TryOCLZeroOpaqueTypeInitialization(Sema &S,
   return false;
 }
 
+static bool TryOCLZeroQueueInitialization(Sema &S,
+                                          InitializationSequence &Sequence,
+                                          QualType DestType,
+                                          Expr *Initializer) {
+  if (!S.getLangOpts().OpenCL || S.getLangOpts().OpenCLVersion < 200 ||
+      !DestType->isQueueT() ||
+      !Initializer->isIntegerConstantExpr(S.getASTContext()) ||
+      (Initializer->EvaluateKnownConstInt(S.getASTContext()) != 0))
+    return false;
+
+  Sequence.AddOCLZeroQueueStep(DestType);
+  return true;
+}
+
 InitializationSequence::InitializationSequence(
     Sema &S, const InitializedEntity &Entity, const InitializationKind &Kind,
     MultiExprArg Args, bool TopLevelOfInitList, bool TreatUnavailableAsInvalid)
@@ -5903,10 +5940,21 @@ void InitializationSequence::InitializeFrom(Sema &S,
         tryObjCWritebackConversion(S, *this, Entity, Initializer)) {
       return;
     }
+  }
+
+  // need to try these when using C++ with OpenCL
+  if (!S.getLangOpts().CPlusPlus || S.getLangOpts().OpenCL) {
+    if (TryOCLSamplerInitialization(S, *this, DestType, Initializer))
+      return;
 
     if (TryOCLZeroOpaqueTypeInitialization(S, *this, DestType, Initializer))
       return;
 
+    if (TryOCLZeroQueueInitialization(S, *this, DestType, Initializer))
+      return;
+  }
+
+  if (!S.getLangOpts().CPlusPlus) {
     // Handle initialization in C
     AddCAssignmentStep(DestType);
     MaybeProduceObjCObject(S, *this, Entity);
@@ -7971,6 +8019,7 @@ ExprResult Sema::PerformQualificationConversion(Expr *E, QualType Ty,
 
   CastKind CK = CK_NoOp;
 
+#if 0 // we don't want this
   if (VK == VK_PRValue) {
     auto PointeeTy = Ty->getPointeeType();
     auto ExprPointeeTy = E->getType()->getPointeeType();
@@ -7980,6 +8029,7 @@ ExprResult Sema::PerformQualificationConversion(Expr *E, QualType Ty,
   } else if (Ty.getAddressSpace() != E->getType().getAddressSpace()) {
     CK = CK_AddressSpaceConversion;
   }
+#endif
 
   return ImpCastExprToType(E, Ty, CK, VK, /*BasePath=*/nullptr, CCK);
 }
@@ -8137,7 +8187,9 @@ ExprResult InitializationSequence::Perform(Sema &S,
   case SK_ProduceObjCObject:
   case SK_StdInitializerList:
   case SK_OCLSamplerInit:
-  case SK_OCLZeroOpaqueType: {
+  case SK_OCLZeroOpaqueType:
+  case SK_OCLZeroEvent:
+  case SK_OCLZeroQueue: {
     assert(Args.size() == 1);
     CurInit = Args[0];
     if (!CurInit.get()) return ExprError();
@@ -8242,7 +8294,10 @@ ExprResult InitializationSequence::Perform(Sema &S,
 
     case SK_BindReferenceToTemporary: {
       // Make sure the "temporary" is actually an rvalue.
-      assert(CurInit.get()->isPRValue() && "not a temporary");
+      // TODO: fix this!
+      //if(CurInit.get()->getType()) {
+      //assert(CurInit.get()->isPRValue() && "not a temporary");
+      //}
 
       // Check exception specifications
       if (S.CheckExceptionSpecCompatibility(CurInit.get(), DestType))
@@ -8823,6 +8878,7 @@ ExprResult InitializationSequence::Perform(Sema &S,
                                       CK_IntToOCLSampler);
       break;
     }
+    case SK_OCLZeroEvent:
     case SK_OCLZeroOpaqueType: {
       assert((Step->Type->isEventT() || Step->Type->isQueueT() ||
               Step->Type->isOCLIntelSubgroupAVCType()) &&
@@ -8830,6 +8886,15 @@ ExprResult InitializationSequence::Perform(Sema &S,
 
       CurInit = S.ImpCastExprToType(CurInit.get(), Step->Type,
                                     CK_ZeroToOCLOpaqueType,
+                                    CurInit.get()->getValueKind());
+      break;
+    }
+    case SK_OCLZeroQueue: {
+      assert(Step->Type->isQueueT() &&
+             "Event initialization on non queue type.");
+
+      CurInit = S.ImpCastExprToType(CurInit.get(), Step->Type,
+                                    CK_ZeroToOCLQueue,
                                     CurInit.get()->getValueKind());
       break;
     }
@@ -9765,8 +9830,13 @@ void InitializationSequence::dump(raw_ostream &OS) const {
       OS << "OpenCL sampler_t from integer constant";
       break;
 
+    case SK_OCLZeroEvent:
     case SK_OCLZeroOpaqueType:
       OS << "OpenCL opaque type from zero";
+      break;
+
+    case SK_OCLZeroQueue:
+      OS << "OpenCL queue_t from zero";
       break;
     }
 

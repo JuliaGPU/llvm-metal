@@ -2378,7 +2378,7 @@ void Verifier::visitFunction(const Function &F) {
     break;
   }
   case CallingConv::AMDGPU_KERNEL:
-  case CallingConv::SPIR_KERNEL:
+  case CallingConv::FLOOR_KERNEL:
     Assert(F.getReturnType()->isVoidTy(),
            "Calling convention requires void return type", &F);
     LLVM_FALLTHROUGH;
@@ -2389,7 +2389,7 @@ void Verifier::visitFunction(const Function &F) {
   case CallingConv::AMDGPU_CS:
     Assert(!F.hasStructRetAttr(),
            "Calling convention does not allow sret", &F);
-    if (F.getCallingConv() != CallingConv::SPIR_KERNEL) {
+    if (F.getCallingConv() != CallingConv::FLOOR_KERNEL) {
       const unsigned StackAS = DL.getAllocaAddrSpace();
       unsigned i = 0;
       for (const Argument &Arg : F.args()) {
@@ -3066,8 +3066,12 @@ void Verifier::visitCallBase(CallBase &Call) {
          "Called function must be a pointer!", Call);
   PointerType *FPTy = cast<PointerType>(Call.getCalledOperand()->getType());
 
+#if 0 // TODO/NOTE: disabled, since parameter address spaces might not match (see below)
   Assert(FPTy->isOpaqueOrPointeeTypeMatches(Call.getFunctionType()),
          "Called function is not the same type as the call!", Call);
+#else
+  (void)FPTy;
+#endif
 
   FunctionType *FTy = Call.getFunctionType();
 
@@ -3081,10 +3085,17 @@ void Verifier::visitCallBase(CallBase &Call) {
            "Incorrect number of arguments passed to called function!", Call);
 
   // Verify that all arguments to the call match the function type.
-  for (unsigned i = 0, e = FTy->getNumParams(); i != e; ++i)
-    Assert(Call.getArgOperand(i)->getType() == FTy->getParamType(i),
+  // Note that address space mismatches will be fixed later.
+  for (unsigned i = 0, e = FTy->getNumParams(); i != e; ++i) {
+    Assert(Call.getArgOperand(i)->getType() == FTy->getParamType(i) ||
+           (Call.getArgOperand(i)->getType()->isPointerTy() &&
+            FTy->getParamType(i)->isPointerTy() &&
+            PointerType::get(cast<PointerType>(Call.getArgOperand(i)->getType())->getElementType(),
+                             FTy->getParamType(i)->getPointerAddressSpace()) ==
+            FTy->getParamType(i)),
            "Call parameter type does not match function signature!",
-           Call.getArgOperand(i), FTy->getParamType(i), Call);
+		   Call.getArgOperand(i), FTy->getParamType(i), Call);
+  }
 
   AttributeList Attrs = Call.getAttributes();
 
@@ -4530,8 +4541,10 @@ void Verifier::visitInstruction(Instruction &I) {
   }
 
   if (MDNode *Range = I.getMetadata(LLVMContext::MD_range)) {
+#if 0 // NOTE: we want range info to be propagated and used everywhere, so ignore this
     Assert(isa<LoadInst>(I) || isa<CallInst>(I) || isa<InvokeInst>(I),
            "Ranges are only for loads, calls and invokes!", &I);
+#endif
     visitRangeMetadata(I, Range, I.getType());
   }
 

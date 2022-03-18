@@ -905,6 +905,8 @@ void AggExprEmitter::VisitCastExpr(CastExpr *E) {
   case CK_CopyAndAutoreleaseBlockObject:
   case CK_BuiltinFnToFnPtr:
   case CK_ZeroToOCLOpaqueType:
+  case CK_ZeroToOCLEvent:
+  case CK_ZeroToOCLQueue:
   case CK_MatrixCast:
 
   case CK_IntToOCLSampler:
@@ -1444,10 +1446,13 @@ static bool castPreservesZero(const CastExpr *CE) {
   case CK_BlockPointerToObjCPointerCast:
   case CK_CPointerToObjCPointerCast:
   case CK_ObjCObjectLValueCast:
-  case CK_IntToOCLSampler:
-  case CK_ZeroToOCLOpaqueType:
     // FIXME: Check these.
     return false;
+  case CK_IntToOCLSampler:
+  case CK_ZeroToOCLOpaqueType:
+  case CK_ZeroToOCLEvent:
+  case CK_ZeroToOCLQueue:
+    return true;
 
   case CK_FixedPointCast:
   case CK_FixedPointToBoolean:
@@ -2060,6 +2065,7 @@ void CodeGenFunction::EmitAggregateCopy(LValue Dest, LValue Src, QualType Ty,
   if (getLangOpts().CPlusPlus) {
     if (const RecordType *RT = Ty->getAs<RecordType>()) {
       CXXRecordDecl *Record = cast<CXXRecordDecl>(RT->getDecl());
+#if 0 // TODO: fix this!
       assert((Record->hasTrivialCopyConstructor() ||
               Record->hasTrivialCopyAssignment() ||
               Record->hasTrivialMoveConstructor() ||
@@ -2067,6 +2073,7 @@ void CodeGenFunction::EmitAggregateCopy(LValue Dest, LValue Src, QualType Ty,
               Record->hasAttr<TrivialABIAttr>() || Record->isUnion()) &&
              "Trying to aggregate-copy a type without a trivial copy/move "
              "constructor or assignment operator");
+#endif
       // Ignore empty classes in C++.
       if (Record->isEmpty())
         return;

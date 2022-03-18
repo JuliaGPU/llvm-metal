@@ -1937,7 +1937,14 @@ private:
   /// Add OpenCL kernel arg metadata and the kernel attribute metadata to
   /// the function metadata.
   void EmitOpenCLKernelMetadata(const FunctionDecl *FD,
-                                llvm::Function *Fn);
+                                llvm::Function *Fn,
+                               const CGFunctionInfo &FnInfo);
+
+  void EmitFloorKernelMetadata(const FunctionDecl *FD,
+                               llvm::Function *Fn,
+                               const FunctionArgList &Args,
+                               const CGFunctionInfo &FnInfo,
+                               CodeGenModule &CGM);
 
 public:
   CodeGenFunction(CodeGenModule &cgm, bool suppressNewContext=false);
@@ -4631,14 +4638,16 @@ private:
   ///
   /// \param AI - The first function argument of the expansion.
   void ExpandTypeFromArgs(QualType Ty, LValue Dst,
-                          llvm::Function::arg_iterator &AI);
+                          llvm::Function::arg_iterator &AI,
+                          const CallingConv CC);
 
   /// ExpandTypeToArgs - Expand an CallArg \arg Arg, with the LLVM type for \arg
   /// Ty, into individual arguments on the provided vector \arg IRCallArgs,
   /// starting at index \arg IRCallArgPos. See ABIArgInfo::Expand.
   void ExpandTypeToArgs(QualType Ty, CallArg Arg, llvm::FunctionType *IRFuncTy,
                         SmallVectorImpl<llvm::Value *> &IRCallArgs,
-                        unsigned &IRCallArgPos);
+                        unsigned &IRCallArgPos,
+                        const CallingConv CC);
 
   llvm::Value* EmitAsmInput(const TargetInfo::ConstraintInfo &Info,
                             const Expr *InputExpr, std::string &ConstraintStr);

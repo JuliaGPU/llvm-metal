@@ -69,7 +69,7 @@ static std::atomic<unsigned> GlobalUniqueCallSite;
 
 static cl::opt<bool> sched4reg(
     "nvptx-sched4reg",
-    cl::desc("NVPTX Specific: schedule for register pressue"), cl::init(false));
+    cl::desc("NVPTX Specific: schedule for register pressue"), cl::init(true));
 
 static cl::opt<unsigned>
 FMAContractLevelOpt("nvptx-fma-level", cl::ZeroOrMore, cl::Hidden,

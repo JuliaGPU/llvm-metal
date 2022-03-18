@@ -19,10 +19,14 @@
 #include <__functional/weak_result_type.h>
 #include <__memory/allocator_arg_t.h>
 #include <__memory/uses_allocator.h>
+#if 0
 #include <exception>
 #include <new>
+#endif
 #include <type_traits>
+#if 0
 #include <typeinfo>
+#endif
 #include <utility>
 
 #if !defined(_LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER)

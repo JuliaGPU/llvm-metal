@@ -27,10 +27,11 @@ namespace llvm {
 class InstCombinePass : public PassInfoMixin<InstCombinePass> {
   InstructionWorklist Worklist;
   const unsigned MaxIterations;
+  bool isVulkan;
 
 public:
-  explicit InstCombinePass();
-  explicit InstCombinePass(unsigned MaxIterations);
+  explicit InstCombinePass(bool isVulkan_ = false);
+  explicit InstCombinePass(unsigned MaxIterations, bool isVulkan_ = false);
 
   PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
 };
@@ -42,12 +43,13 @@ public:
 class InstructionCombiningPass : public FunctionPass {
   InstructionWorklist Worklist;
   const unsigned MaxIterations;
+  const bool isVulkan;
 
 public:
   static char ID; // Pass identification, replacement for typeid
 
-  explicit InstructionCombiningPass();
-  explicit InstructionCombiningPass(unsigned MaxIterations);
+  explicit InstructionCombiningPass(bool isVulkan_ = false);
+  explicit InstructionCombiningPass(unsigned MaxIterations, bool isVulkan_ = false);
 
   void getAnalysisUsage(AnalysisUsage &AU) const override;
   bool runOnFunction(Function &F) override;
@@ -65,8 +67,11 @@ public:
 // into:
 //    %Z = add int 2, %X
 //
-FunctionPass *createInstructionCombiningPass();
-FunctionPass *createInstructionCombiningPass(unsigned MaxIterations);
+// "isVulkan" is necessary, because we want to prevent certain illegal
+// instruction combines when generating IR for Vulkan.
+//
+FunctionPass *createInstructionCombiningPass(bool isVulkan = false);
+FunctionPass *createInstructionCombiningPass(unsigned MaxIterations, bool isVulkan = false);
 }
 
 #undef DEBUG_TYPE

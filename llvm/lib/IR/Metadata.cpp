@@ -408,11 +408,20 @@ void ValueAsMetadata::handleDeletion(Value *V) {
   delete MD;
 }
 
-void ValueAsMetadata::handleRAUW(Value *From, Value *To) {
+void ValueAsMetadata::handleRAUW(Value *From, Value *To, const bool AllowASChange) {
   assert(From && "Expected valid value");
   assert(To && "Expected valid value");
   assert(From != To && "Expected changed value");
-  assert(From->getType() == To->getType() && "Unexpected type change");
+  if (AllowASChange &&
+      From->getType()->isPointerTy() &&
+      To->getType()->isPointerTy()) {
+    assert(From->getType()->getPointerElementType() ==
+           To->getType()->getPointerElementType() &&
+           "Unexpected type change");
+  } else {
+    assert(From->getType() == To->getType() &&
+           "Unexpected type change");
+  }
 
   LLVMContext &Context = From->getType()->getContext();
   auto &Store = Context.pImpl->ValuesAsMetadata;
@@ -1291,6 +1300,11 @@ bool Value::eraseMetadata(unsigned KindID) {
 void Value::clearMetadata() {
   if (!HasMetadata)
     return;
+  if (auto F = dyn_cast<Function>(this)) {
+    if (F->getSubprogram()) {
+      F->getSubprogram()->associated_function = nullptr;
+    }
+  }
   assert(getContext().pImpl->ValueMetadata.count(this) &&
          "bit out of sync with hash table");
   getContext().pImpl->ValueMetadata.erase(this);
@@ -1536,6 +1550,7 @@ GlobalObject::VCallVisibility GlobalObject::getVCallVisibility() const {
 
 void Function::setSubprogram(DISubprogram *SP) {
   setMetadata(LLVMContext::MD_dbg, SP);
+  if(SP) SP->associated_function = this;
 }
 
 DISubprogram *Function::getSubprogram() const {

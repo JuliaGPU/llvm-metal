@@ -13,7 +13,10 @@
 #pragma GCC system_header
 #endif
 
+// TODO: support this on CPU targets
+#if 0
 #include_next <stdio.h>
+#endif
 
 #elif !defined(_LIBCPP_STDIO_H)
 #define _LIBCPP_STDIO_H

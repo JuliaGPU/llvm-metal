@@ -362,6 +362,7 @@ int main(int argc, char **argv) {
   initializeUnreachableBlockElimLegacyPassPass(*Registry);
   initializeConstantHoistingLegacyPassPass(*Registry);
   initializeScalarOpts(*Registry);
+  initializeLibFloor(*Registry);
   initializeVectorization(*Registry);
   initializeScalarizeMaskedMemIntrinLegacyPassPass(*Registry);
   initializeExpandReductionsPass(*Registry);

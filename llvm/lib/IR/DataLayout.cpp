@@ -75,6 +75,19 @@ StructLayout::StructLayout(StructType *ST, const DataLayout &DL) {
     IsPadded = true;
     StructSize = alignTo(StructSize, StructAlignment);
   }
+
+  // fix up graphics I/O types (densely pack vector types)
+  if (ST->isGraphicsIOType()) {
+    uint64_t offset_fix = 0;
+    for (uint32_t i = 0; i < NumElements; ++i) {
+      getMemberOffsets()[i] -= offset_fix;
+
+      const auto type = ST->getElementType(i);
+      if (type->isVectorTy()) {
+        offset_fix += DL.getABITypeAlignment(type) - DL.getTypeStoreSize(type);
+      }
+    }
+  }
 }
 
 /// getElementContainingOffset - Given a valid offset into the structure,

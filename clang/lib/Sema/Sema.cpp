@@ -174,6 +174,7 @@ const uint64_t Sema::MaximumAlignment;
 Sema::Sema(Preprocessor &pp, ASTContext &ctxt, ASTConsumer &consumer,
            TranslationUnitKind TUKind, CodeCompleteConsumer *CodeCompleter)
     : ExternalSource(nullptr), isMultiplexExternalSource(false),
+      OpenCLFeatures(ctxt.getOpenCLFeatures()),
       CurFPFeatures(pp.getLangOpts()), LangOpts(pp.getLangOpts()), PP(pp),
       Context(ctxt), Consumer(consumer), Diags(PP.getDiagnostics()),
       SourceMgr(PP.getSourceManager()), CollectStats(false),
@@ -317,6 +318,10 @@ void Sema::Initialize() {
     addImplicitTypedef("size_t", Context.getSizeType());
   }
 
+  if (getLangOpts().Metal || getLangOpts().Vulkan || getLangOpts().OpenCL) {
+    addImplicitTypedef("__patch_control_point_t", Context.OCLPatchControlPointTy);
+  }
+
   // Initialize predefined OpenCL types and supported extensions and (optional)
   // core features.
   if (getLangOpts().OpenCL) {
@@ -324,6 +329,11 @@ void Sema::Initialize() {
         Context.getTargetInfo().getSupportedOpenCLOpts(), getLangOpts());
     addImplicitTypedef("sampler_t", Context.OCLSamplerTy);
     addImplicitTypedef("event_t", Context.OCLEventTy);
+
+#define IMAGE_TYPE(ImgType, Id, SingletonId, Access, Suffix) \
+    addImplicitTypedef(#ImgType #Suffix "_t", Context. SingletonId);
+#include "clang/Basic/OpenCLImageTypes.def"
+
     if (getLangOpts().getOpenCLCompatibleVersion() >= 200) {
       addImplicitTypedef("clk_event_t", Context.OCLClkEventTy);
       addImplicitTypedef("queue_t", Context.OCLQueueTy);
@@ -1431,8 +1441,12 @@ NamedDecl *Sema::getCurFunctionOrMethodDecl() {
 }
 
 LangAS Sema::getDefaultCXXMethodAddrSpace() const {
+#if 0 // we don't want this + we don't want any calls to this -> error if so
   if (getLangOpts().OpenCL)
     return getASTContext().getDefaultOpenCLPointeeAddrSpace();
+#else
+  assert(false && "should not be here - all calls to this should be disabled");
+#endif
   return LangAS::Default;
 }
 

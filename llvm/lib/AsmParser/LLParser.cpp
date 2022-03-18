@@ -1787,8 +1787,12 @@ void LLParser::parseOptionalDLLStorageClass(unsigned &Res) {
 ///   ::= 'avr_signalcc'
 ///   ::= 'ptx_kernel'
 ///   ::= 'ptx_device'
-///   ::= 'spir_func'
-///   ::= 'spir_kernel'
+///   ::= 'floor_func'
+///   ::= 'floor_kernel'
+///   ::= 'floor_vertex'
+///   ::= 'floor_fragment'
+///   ::= 'floor_tessellation_control'
+///   ::= 'floor_tessellation_evaluation'
 ///   ::= 'x86_64_sysvcc'
 ///   ::= 'win64cc'
 ///   ::= 'webkit_jscc'
@@ -1837,8 +1841,12 @@ bool LLParser::parseOptionalCallingConv(unsigned &CC) {
   case lltok::kw_avr_signalcc:   CC = CallingConv::AVR_SIGNAL; break;
   case lltok::kw_ptx_kernel:     CC = CallingConv::PTX_Kernel; break;
   case lltok::kw_ptx_device:     CC = CallingConv::PTX_Device; break;
-  case lltok::kw_spir_kernel:    CC = CallingConv::SPIR_KERNEL; break;
-  case lltok::kw_spir_func:      CC = CallingConv::SPIR_FUNC; break;
+  case lltok::kw_floor_kernel:   CC = CallingConv::FLOOR_KERNEL; break;
+  case lltok::kw_floor_vertex:   CC = CallingConv::FLOOR_VERTEX; break;
+  case lltok::kw_floor_fragment: CC = CallingConv::FLOOR_FRAGMENT; break;
+  case lltok::kw_floor_tessellation_control:    CC = CallingConv::FLOOR_TESS_CONTROL; break;
+  case lltok::kw_floor_tessellation_evaluation: CC = CallingConv::FLOOR_TESS_EVAL; break;
+  case lltok::kw_floor_func:     CC = CallingConv::FLOOR_FUNC; break;
   case lltok::kw_intel_ocl_bicc: CC = CallingConv::Intel_OCL_BI; break;
   case lltok::kw_x86_64_sysvcc:  CC = CallingConv::X86_64_SysV; break;
   case lltok::kw_win64cc:        CC = CallingConv::Win64; break;
@@ -3309,10 +3317,12 @@ bool LLParser::parseValID(ValID &ID, PerFunctionState *PFS, Type *ExpectedTy) {
         parseType(DestTy) ||
         parseToken(lltok::rparen, "expected ')' at end of constantexpr cast"))
       return true;
+#if 0 // allow any (AS) cast (TODO: do this better)
     if (!CastInst::castIsValid((Instruction::CastOps)Opc, SrcVal, DestTy))
       return error(ID.Loc, "invalid cast opcode for cast from '" +
                                getTypeString(SrcVal->getType()) + "' to '" +
                                getTypeString(DestTy) + "'");
+#endif
     ID.ConstantVal = ConstantExpr::getCast((Instruction::CastOps)Opc,
                                                  SrcVal, DestTy);
     ID.Kind = ValID::t_Constant;
@@ -6735,12 +6745,14 @@ bool LLParser::parseCast(Instruction *&Inst, PerFunctionState &PFS,
       parseType(DestTy))
     return true;
 
+#if 0 // allow any (AS) cast (TODO: do this better)
   if (!CastInst::castIsValid((Instruction::CastOps)Opc, Op, DestTy)) {
     CastInst::castIsValid((Instruction::CastOps)Opc, Op, DestTy);
     return error(Loc, "invalid cast opcode for cast from '" +
                           getTypeString(Op->getType()) + "' to '" +
                           getTypeString(DestTy) + "'");
   }
+#endif
   Inst = CastInst::Create((Instruction::CastOps)Opc, Op, DestTy);
   return false;
 }

@@ -620,10 +620,12 @@ void ELFWriter::computeSymbolTable(
 
   std::vector<ELFSymbolData> LocalSymbolData;
   std::vector<ELFSymbolData> ExternalSymbolData;
+#if 0 // don't emit file names, we don't need them or want to expose them
   MutableArrayRef<std::pair<std::string, size_t>> FileNames =
       Asm.getFileNames();
   for (const std::pair<std::string, size_t> &F : FileNames)
     StrTabBuilder.add(F.first);
+#endif
 
   // Add the data for the symbols.
   bool HasLargeSectionIndex = false;
@@ -719,11 +721,14 @@ void ELFWriter::computeSymbolTable(
 
   // Make the first STT_FILE precede previous local symbols.
   unsigned Index = 1;
+#if 0 // see above, there are no filenames
   auto FileNameIt = FileNames.begin();
   if (!FileNames.empty())
     FileNames[0].second = 0;
+#endif
 
   for (ELFSymbolData &MSD : LocalSymbolData) {
+#if 0 // see above, there are no filenames
     // Emit STT_FILE symbols before their associated local symbols.
     for (; FileNameIt != FileNames.end() && FileNameIt->second <= MSD.Order;
          ++FileNameIt) {
@@ -732,6 +737,7 @@ void ELFWriter::computeSymbolTable(
                          ELF::SHN_ABS, true);
       ++Index;
     }
+#endif
 
     unsigned StringIndex = MSD.Symbol->getType() == ELF::STT_SECTION
                                ? 0
@@ -739,12 +745,14 @@ void ELFWriter::computeSymbolTable(
     MSD.Symbol->setIndex(Index++);
     writeSymbol(Writer, StringIndex, MSD, Layout);
   }
+#if 0 // see above, there are no filenames
   for (; FileNameIt != FileNames.end(); ++FileNameIt) {
     Writer.writeSymbol(StrTabBuilder.getOffset(FileNameIt->first),
                        ELF::STT_FILE | ELF::STB_LOCAL, 0, 0, ELF::STV_DEFAULT,
                        ELF::SHN_ABS, true);
     ++Index;
   }
+#endif
 
   // Write the symbol table entries.
   LastLocalSymbolIndex = Index;

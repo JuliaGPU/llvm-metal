@@ -45,14 +45,14 @@ private:
     _Tp __value_;
 public:
     _LIBCPP_INLINE_VISIBILITY _LIBCPP_CONSTEXPR istream_iterator() : __in_stream_(nullptr), __value_() {}
-    _LIBCPP_INLINE_VISIBILITY istream_iterator(istream_type& __s) : __in_stream_(_VSTD::addressof(__s))
+    _LIBCPP_INLINE_VISIBILITY istream_iterator(istream_type& __s) : __in_stream_(__builtin_addressof(__s))
         {
             if (!(*__in_stream_ >> __value_))
                 __in_stream_ = nullptr;
         }
 
     _LIBCPP_INLINE_VISIBILITY const _Tp& operator*() const {return __value_;}
-    _LIBCPP_INLINE_VISIBILITY const _Tp* operator->() const {return _VSTD::addressof((operator*()));}
+    _LIBCPP_INLINE_VISIBILITY const _Tp* operator->() const {return __builtin_addressof((operator*()));}
     _LIBCPP_INLINE_VISIBILITY istream_iterator& operator++()
         {
             if (!(*__in_stream_ >> __value_))

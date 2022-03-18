@@ -96,7 +96,7 @@ static bool hasFunctionProto(const Decl *D) {
 /// hasFunctionProto first).
 static unsigned getFunctionOrMethodNumParams(const Decl *D) {
   if (const FunctionType *FnTy = D->getFunctionType())
-    return cast<FunctionProtoType>(FnTy)->getNumParams();
+    return (hasFunctionProto(D) ? cast<FunctionProtoType>(FnTy)->getNumParams() : 0);
   if (const auto *BD = dyn_cast<BlockDecl>(D))
     return BD->getNumParams();
   return cast<ObjCMethodDecl>(D)->param_size();
@@ -376,6 +376,24 @@ template <typename AttrType>
 static void handleSimpleAttribute(Sema &S, Decl *D,
                                   const AttributeCommonInfo &CI) {
   D->addAttr(::new (S.Context) AttrType(S.Context, CI));
+}
+
+template <typename AttrType>
+static void handleSimpleAttributeWithExclusions(Sema &S, Decl *D,
+                                                const ParsedAttr &AL) {
+  handleSimpleAttribute<AttrType>(S, D, AL);
+}
+
+/// Applies the given attribute to the Decl so long as the Decl doesn't
+/// already have one of the given incompatible attributes.
+template <typename AttrType, typename IncompatibleAttrType,
+          typename... IncompatibleAttrTypes>
+static void handleSimpleAttributeWithExclusions(Sema &S, Decl *D,
+                                                const ParsedAttr &AL) {
+  if (checkAttrMutualExclusion<IncompatibleAttrType>(S, D, AL))
+    return;
+  handleSimpleAttributeWithExclusions<AttrType, IncompatibleAttrTypes...>(S, D,
+                                                                          AL);
 }
 
 template <typename... DiagnosticArgs>
@@ -2748,6 +2766,220 @@ static void handleVisibilityAttr(Sema &S, Decl *D, const ParsedAttr &AL,
     D->addAttr(newAttr);
 }
 
+static void handleFloorImageDataTypeAttr(Sema &S, Decl *D, const ParsedAttr &Attr) {
+  if (!Attr.hasParsedType()) {
+    S.Diag(Attr.getLoc(), diag::err_attribute_wrong_number_arguments) << Attr << 1;
+    return;
+  }
+
+  TypeSourceInfo *ParmTSI = nullptr;
+  S.GetTypeFromParser(Attr.getTypeArg(), &ParmTSI);
+  D->addAttr(::new (S.Context) FloorImageDataTypeAttr(S.Context, Attr, ParmTSI));
+}
+
+static void handleFloorImageFlagsAttr(Sema &S, Decl *D, const ParsedAttr &Attr) {
+  if (!Attr.checkExactlyNumArgs(S, 1)) {
+    Attr.setInvalid();
+    return;
+  }
+  S.AddFloorImageFlagsAttr(Attr.getRange(), D, Attr.getArgAsExpr(0), Attr);
+}
+
+void Sema::AddFloorImageFlagsAttr(SourceRange AttrRange, Decl *D, Expr *E, const AttributeCommonInfo &CI) {
+  FloorImageFlagsAttr TmpAttr(Context, CI, E);
+  SourceLocation AttrLoc = AttrRange.getBegin();
+
+  QualType T;
+  if (ValueDecl *VD = dyn_cast<ValueDecl>(D))
+    T = VD->getType();
+  else {
+    Diag(AttrLoc, diag::err_attribute_argument_type) <<
+      &TmpAttr << AANT_ArgumentIntegerConstant;
+    return;
+  }
+
+  if (!E->isValueDependent()) {
+    Expr::EvalResult result;
+    if (!E->EvaluateAsRValue(result, Context) || !result.Val.isInt()) {
+      Diag(AttrLoc, diag::err_attribute_argument_n_type)
+        << &TmpAttr << 0u << AANT_ArgumentConstantExpr
+        << E->getSourceRange();
+      return;
+    }
+    auto& ImageFlags = result.Val.getInt();
+    if (ImageFlags.getBitWidth() != 64 || !ImageFlags.isUnsigned()) {
+      Diag(AttrLoc, diag::err_attribute_argument_invalid) <<
+        &TmpAttr << AANT_ArgumentIntegerConstant;
+      return;
+    }
+
+    auto attr = ::new (Context) FloorImageFlagsAttr(Context, CI, E);
+    attr->setEvalFlags(ImageFlags.getZExtValue());
+    D->addAttr(attr);
+    return;
+  }
+
+  // Save dependent expressions in the AST to be instantiated.
+  D->addAttr(::new (Context) FloorImageFlagsAttr(TmpAttr));
+}
+
+static void handleGraphicsFBOColorLocationAttr(Sema &S, Decl *D, const ParsedAttr &Attr) {
+  if (!Attr.checkExactlyNumArgs(S, 1)) {
+    Attr.setInvalid();
+    return;
+  }
+  S.AddGraphicsFBOColorLocationAttr(Attr.getRange(), D, Attr.getArgAsExpr(0),
+                                    Attr);
+}
+
+void Sema::AddGraphicsFBOColorLocationAttr(SourceRange AttrRange, Decl *D, Expr *E, const AttributeCommonInfo &CI) {
+  GraphicsFBOColorLocationAttr TmpAttr(Context, CI, E);
+  SourceLocation AttrLoc = AttrRange.getBegin();
+
+  QualType T;
+  if (ValueDecl *VD = dyn_cast<ValueDecl>(D))
+    T = VD->getType();
+  else {
+    Diag(AttrLoc, diag::err_attribute_argument_type) <<
+      &TmpAttr << AANT_ArgumentIntegerConstant;
+    return;
+  }
+
+  // TODO: check usage
+
+  if (!E->isValueDependent()) {
+    // TODO: might want to use/check isPotentialConstantExprUnevaluated
+
+    llvm::APSInt ColorLoc(32);
+    ExprResult ICE
+      = VerifyIntegerConstantExpression(E, &ColorLoc, AllowFoldKind::AllowFold);
+    if (ICE.isInvalid())
+      return;
+
+    // check for < 0 location
+    if (ColorLoc.isNegative()) {
+      unsigned diagID = Diags.getCustomDiagID(DiagnosticsEngine::Error, "%0");
+      Diags.Report(AttrRange.getBegin(), diagID) << "location must not be negative!";
+      return;
+    }
+
+    auto loc_attr = ::new (Context) GraphicsFBOColorLocationAttr(Context, CI, ICE.get());
+    loc_attr->setEvalLocation((unsigned int)ColorLoc.getZExtValue());
+    D->addAttr(loc_attr);
+    return;
+  }
+
+  // Save dependent expressions in the AST to be instantiated.
+  D->addAttr(::new (Context) GraphicsFBOColorLocationAttr(TmpAttr));
+}
+
+static void handleGraphicsFBODepthTypeAttr(Sema &S, Decl *D, const ParsedAttr &Attr) {
+  if (!Attr.checkExactlyNumArgs(S, 1)) {
+    Attr.setInvalid();
+    return;
+  }
+
+  GraphicsFBODepthTypeAttr::DepthQualifierType type;
+  if (Attr.isArgIdent(0)) {
+    IdentifierLoc *Ident = Attr.getArgAsIdent(0);
+    StringRef TypeString = Ident->Ident->getName();
+
+    if (!GraphicsFBODepthTypeAttr::ConvertStrToDepthQualifierType(TypeString, type)) {
+      S.Diag(Ident->Loc, diag::warn_attribute_type_not_supported)
+        << Attr << TypeString;
+      return;
+    }
+  }
+  else {
+    S.Diag(Attr.getLoc(), diag::err_attribute_argument_type) <<
+      Attr << AANT_ArgumentIdentifier;
+    return;
+  }
+
+  D->addAttr(::new (S.Context)
+             GraphicsFBODepthTypeAttr(S.Context, Attr, type));
+}
+
+static void handleGraphicsTessellationPatchAttr(Sema &S, Decl *D, const ParsedAttr &Attr) {
+  if (!Attr.checkExactlyNumArgs(S, 2)) {
+    Attr.setInvalid();
+    return;
+  }
+
+  GraphicsTessellationPatchAttr::PatchPrimitiveType type;
+  if (Attr.isArgIdent(0)) {
+    IdentifierLoc *Ident = Attr.getArgAsIdent(0);
+    StringRef TypeString = Ident->Ident->getName();
+
+    if (!GraphicsTessellationPatchAttr::ConvertStrToPatchPrimitiveType(TypeString, type)) {
+      unsigned diagID = S.getDiagnostics().getCustomDiagID(DiagnosticsEngine::Error, "%0");
+      S.Diag(Ident->Loc, diagID) << "invalid primitive type (must be 'triangle' or 'quad')" << TypeString;
+      return;
+    }
+  } else {
+    S.Diag(Attr.getLoc(), diag::err_attribute_argument_type) <<
+      Attr << AANT_ArgumentIdentifier;
+    return;
+  }
+
+  if (!Attr.isArgExpr(1)) {
+    S.Diag(Attr.getLoc(), diag::err_attribute_argument_type) <<
+      Attr << AANT_ArgumentConstantExpr;
+    return;
+  }
+
+  auto control_points_arg = Attr.getArgAsExpr(1);
+  if (!control_points_arg) {
+    S.Diag(Attr.getLoc(), diag::err_attribute_argument_type) <<
+    Attr << AANT_ArgumentConstantExpr;
+    return;
+  }
+
+  llvm::APSInt control_points(32, true /* unsigned */);
+  ExprResult control_points_res
+    = S.VerifyIntegerConstantExpression(control_points_arg, &control_points,
+        clang::Sema::AllowFoldKind::AllowFold);
+  if (control_points_res.isInvalid()) {
+    Attr.setInvalid();
+    return;
+  }
+
+  uint32_t control_point_count = (uint32_t)control_points.getZExtValue();
+  if (control_point_count > 32u) {
+    unsigned diagID = S.getDiagnostics().getCustomDiagID(DiagnosticsEngine::Error, "%0");
+    S.Diag(Attr.getRange().getBegin(), diagID) << "number of control points must be <= 32";
+    return;
+  }
+
+  D->addAttr(::new (S.Context)
+			 GraphicsTessellationPatchAttr(S.Context, Attr, type, control_point_count));
+}
+
+static void handleRangeAttr(Sema &S, Decl *D, const ParsedAttr &Attr) {
+  if (!Attr.checkExactlyNumArgs(S, 2)) {
+    Attr.setInvalid();
+    return;
+  }
+
+  llvm::APSInt lower_bound(64), upper_bound(64);
+  ExprResult lower_res
+    = S.VerifyIntegerConstantExpression(Attr.getArgAsExpr(0), &lower_bound,
+        clang::Sema::AllowFoldKind::AllowFold);
+  ExprResult upper_res
+    = S.VerifyIntegerConstantExpression(Attr.getArgAsExpr(1), &upper_bound,
+        clang::Sema::AllowFoldKind::AllowFold);
+  if (lower_res.isInvalid() || upper_res.isInvalid()) return;
+
+  if ((lower_bound.isUnsigned() && lower_bound.getZExtValue() > upper_bound.getZExtValue()) ||
+	  (!lower_bound.isUnsigned() && lower_bound.getExtValue() > upper_bound.getExtValue())) {
+    unsigned diagID = S.getDiagnostics().getCustomDiagID(DiagnosticsEngine::Error, "%0");
+    S.Diag(Attr.getRange().getBegin(), diagID) << "lower bound must be lower than the upper bound";
+    return;
+  }
+
+  D->addAttr(::new (S.Context) RetRangeAttr(S.Context, Attr, lower_res.get(), upper_res.get()));
+}
+
 static void handleObjCDirectAttr(Sema &S, Decl *D, const ParsedAttr &AL) {
   // objc_direct cannot be set on methods declared in the context of a protocol
   if (isa<ObjCProtocolDecl>(D->getDeclContext())) {
@@ -4564,87 +4796,6 @@ static void handleOptimizeNoneAttr(Sema &S, Decl *D, const ParsedAttr &AL) {
     D->addAttr(Optnone);
 }
 
-static void handleConstantAttr(Sema &S, Decl *D, const ParsedAttr &AL) {
-  const auto *VD = cast<VarDecl>(D);
-  if (VD->hasLocalStorage()) {
-    S.Diag(AL.getLoc(), diag::err_cuda_nonstatic_constdev);
-    return;
-  }
-  // constexpr variable may already get an implicit constant attr, which should
-  // be replaced by the explicit constant attr.
-  if (auto *A = D->getAttr<CUDAConstantAttr>()) {
-    if (!A->isImplicit())
-      return;
-    D->dropAttr<CUDAConstantAttr>();
-  }
-  D->addAttr(::new (S.Context) CUDAConstantAttr(S.Context, AL));
-}
-
-static void handleSharedAttr(Sema &S, Decl *D, const ParsedAttr &AL) {
-  const auto *VD = cast<VarDecl>(D);
-  // extern __shared__ is only allowed on arrays with no length (e.g.
-  // "int x[]").
-  if (!S.getLangOpts().GPURelocatableDeviceCode && VD->hasExternalStorage() &&
-      !isa<IncompleteArrayType>(VD->getType())) {
-    S.Diag(AL.getLoc(), diag::err_cuda_extern_shared) << VD;
-    return;
-  }
-  if (S.getLangOpts().CUDA && VD->hasLocalStorage() &&
-      S.CUDADiagIfHostCode(AL.getLoc(), diag::err_cuda_host_shared)
-          << S.CurrentCUDATarget())
-    return;
-  D->addAttr(::new (S.Context) CUDASharedAttr(S.Context, AL));
-}
-
-static void handleGlobalAttr(Sema &S, Decl *D, const ParsedAttr &AL) {
-  const auto *FD = cast<FunctionDecl>(D);
-  if (!FD->getReturnType()->isVoidType() &&
-      !FD->getReturnType()->getAs<AutoType>() &&
-      !FD->getReturnType()->isInstantiationDependentType()) {
-    SourceRange RTRange = FD->getReturnTypeSourceRange();
-    S.Diag(FD->getTypeSpecStartLoc(), diag::err_kern_type_not_void_return)
-        << FD->getType()
-        << (RTRange.isValid() ? FixItHint::CreateReplacement(RTRange, "void")
-                              : FixItHint());
-    return;
-  }
-  if (const auto *Method = dyn_cast<CXXMethodDecl>(FD)) {
-    if (Method->isInstance()) {
-      S.Diag(Method->getBeginLoc(), diag::err_kern_is_nonstatic_method)
-          << Method;
-      return;
-    }
-    S.Diag(Method->getBeginLoc(), diag::warn_kern_is_method) << Method;
-  }
-  // Only warn for "inline" when compiling for host, to cut down on noise.
-  if (FD->isInlineSpecified() && !S.getLangOpts().CUDAIsDevice)
-    S.Diag(FD->getBeginLoc(), diag::warn_kern_is_inline) << FD;
-
-  D->addAttr(::new (S.Context) CUDAGlobalAttr(S.Context, AL));
-  // In host compilation the kernel is emitted as a stub function, which is
-  // a helper function for launching the kernel. The instructions in the helper
-  // function has nothing to do with the source code of the kernel. Do not emit
-  // debug info for the stub function to avoid confusing the debugger.
-  if (S.LangOpts.HIP && !S.LangOpts.CUDAIsDevice)
-    D->addAttr(NoDebugAttr::CreateImplicit(S.Context));
-}
-
-static void handleDeviceAttr(Sema &S, Decl *D, const ParsedAttr &AL) {
-  if (const auto *VD = dyn_cast<VarDecl>(D)) {
-    if (VD->hasLocalStorage()) {
-      S.Diag(AL.getLoc(), diag::err_cuda_nonstatic_constdev);
-      return;
-    }
-  }
-
-  if (auto *A = D->getAttr<CUDADeviceAttr>()) {
-    if (!A->isImplicit())
-      return;
-    D->dropAttr<CUDADeviceAttr>();
-  }
-  D->addAttr(::new (S.Context) CUDADeviceAttr(S.Context, AL));
-}
-
 static void handleManagedAttr(Sema &S, Decl *D, const ParsedAttr &AL) {
   if (const auto *VD = dyn_cast<VarDecl>(D)) {
     if (VD->hasLocalStorage()) {
@@ -4919,6 +5070,11 @@ bool Sema::CheckCallingConvAttr(const ParsedAttr &Attrs, CallingConv &CC,
   case ParsedAttr::AT_PreserveAll:
     CC = CC_PreserveAll;
     break;
+  case ParsedAttr::AT_GraphicsVertexShader: CC = CC_FloorVertex; break;
+  case ParsedAttr::AT_GraphicsFragmentShader: CC = CC_FloorFragment; break;
+  case ParsedAttr::AT_GraphicsTessellationControlShader: CC = CC_FloorTessControl; break;
+  case ParsedAttr::AT_GraphicsTessellationEvaluationShader: CC = CC_FloorTessEval; break;
+  case ParsedAttr::AT_ComputeKernel: CC = CC_FloorKernel; break;
   default: llvm_unreachable("unexpected attribute kind");
   }
 
@@ -7544,53 +7700,6 @@ static void handleOpenCLNoSVMAttr(Sema &S, Decl *D, const ParsedAttr &AL) {
         << AL << S.LangOpts.getOpenCLVersionString();
 }
 
-static void handleOpenCLAccessAttr(Sema &S, Decl *D, const ParsedAttr &AL) {
-  if (D->isInvalidDecl())
-    return;
-
-  // Check if there is only one access qualifier.
-  if (D->hasAttr<OpenCLAccessAttr>()) {
-    if (D->getAttr<OpenCLAccessAttr>()->getSemanticSpelling() ==
-        AL.getSemanticSpelling()) {
-      S.Diag(AL.getLoc(), diag::warn_duplicate_declspec)
-          << AL.getAttrName()->getName() << AL.getRange();
-    } else {
-      S.Diag(AL.getLoc(), diag::err_opencl_multiple_access_qualifiers)
-          << D->getSourceRange();
-      D->setInvalidDecl(true);
-      return;
-    }
-  }
-
-  // OpenCL v2.0 s6.6 - read_write can be used for image types to specify that
-  // an image object can be read and written. OpenCL v2.0 s6.13.6 - A kernel
-  // cannot read from and write to the same pipe object. Using the read_write
-  // (or __read_write) qualifier with the pipe qualifier is a compilation error.
-  // OpenCL v3.0 s6.8 - For OpenCL C 2.0, or with the
-  // __opencl_c_read_write_images feature, image objects specified as arguments
-  // to a kernel can additionally be declared to be read-write.
-  // C++ for OpenCL 1.0 inherits rule from OpenCL C v2.0.
-  // C++ for OpenCL 2021 inherits rule from OpenCL C v3.0.
-  if (const auto *PDecl = dyn_cast<ParmVarDecl>(D)) {
-    const Type *DeclTy = PDecl->getType().getCanonicalType().getTypePtr();
-    if (AL.getAttrName()->getName().contains("read_write")) {
-      bool ReadWriteImagesUnsupported =
-          (S.getLangOpts().getOpenCLCompatibleVersion() < 200) ||
-          (S.getLangOpts().getOpenCLCompatibleVersion() == 300 &&
-           !S.getOpenCLOptions().isSupported("__opencl_c_read_write_images",
-                                             S.getLangOpts()));
-      if (ReadWriteImagesUnsupported || DeclTy->isPipeType()) {
-        S.Diag(AL.getLoc(), diag::err_opencl_invalid_read_write)
-            << AL << PDecl->getType() << DeclTy->isImageType();
-        D->setInvalidDecl(true);
-        return;
-      }
-    }
-  }
-
-  D->addAttr(::new (S.Context) OpenCLAccessAttr(S.Context, AL));
-}
-
 static void handleSYCLKernelAttr(Sema &S, Decl *D, const ParsedAttr &AL) {
   // The 'sycl_kernel' attribute applies only to function templates.
   const auto *FD = cast<FunctionDecl>(D);
@@ -8009,7 +8118,7 @@ static void ProcessDeclAttribute(Sema &S, Scope *scope, Decl *D,
     handleCommonAttr(S, D, AL);
     break;
   case ParsedAttr::AT_CUDAConstant:
-    handleConstantAttr(S, D, AL);
+    handleSimpleAttributeWithExclusions<CUDAConstantAttr, CUDASharedAttr>(S, D, AL);
     break;
   case ParsedAttr::AT_PassObjectSize:
     handlePassObjectSizeAttr(S, D, AL);
@@ -8065,11 +8174,8 @@ static void ProcessDeclAttribute(Sema &S, Scope *scope, Decl *D,
   case ParsedAttr::AT_CalledOnce:
     handleCalledOnceAttr(S, D, AL);
     break;
-  case ParsedAttr::AT_CUDAGlobal:
-    handleGlobalAttr(S, D, AL);
-    break;
   case ParsedAttr::AT_CUDADevice:
-    handleDeviceAttr(S, D, AL);
+    handleSimpleAttributeWithExclusions<CUDADeviceAttr, ComputeKernelAttr>(S, D, AL);
     break;
   case ParsedAttr::AT_HIPManaged:
     handleManagedAttr(S, D, AL);
@@ -8121,7 +8227,7 @@ static void ProcessDeclAttribute(Sema &S, Scope *scope, Decl *D,
       handleSimpleAttribute<NoThrowAttr>(S, D, AL);
     break;
   case ParsedAttr::AT_CUDAShared:
-    handleSharedAttr(S, D, AL);
+    handleSimpleAttributeWithExclusions<CUDASharedAttr, CUDAConstantAttr>(S, D, AL);
     break;
   case ParsedAttr::AT_VecReturn:
     handleVecReturnAttr(S, D, AL);
@@ -8271,6 +8377,57 @@ static void ProcessDeclAttribute(Sema &S, Scope *scope, Decl *D,
   case ParsedAttr::AT_Sentinel:
     handleSentinelAttr(S, D, AL);
     break;
+  case ParsedAttr::AT_ComputeKernel:
+    handleSimpleAttribute<ComputeKernelAttr>(S, D, AL);
+    break;
+  case ParsedAttr::AT_GraphicsVertexShader:
+    handleSimpleAttribute<GraphicsVertexShaderAttr>(S, D, AL);
+    break;
+  case ParsedAttr::AT_GraphicsFragmentShader:
+    handleSimpleAttribute<GraphicsFragmentShaderAttr>(S, D, AL);
+    break;
+  case ParsedAttr::AT_GraphicsTessellationControlShader:
+    handleSimpleAttribute<GraphicsTessellationControlShaderAttr>(S, D, AL);
+    break;
+  case ParsedAttr::AT_GraphicsTessellationEvaluationShader:
+    handleSimpleAttribute<GraphicsTessellationEvaluationShaderAttr>(S, D, AL);
+    break;
+  case ParsedAttr::AT_GraphicsTessellationPatch:
+    handleGraphicsTessellationPatchAttr(S, D, AL);
+    break;
+  case ParsedAttr::AT_RetRange:
+    handleRangeAttr(S, D, AL);
+    break;
+  case ParsedAttr::AT_ImageAccess:
+    handleSimpleAttribute<ImageAccessAttr>(S, D, AL);
+    break;
+  case ParsedAttr::AT_FloorArgBuffer:
+    handleSimpleAttribute<FloorArgBufferAttr>(S, D, AL);
+    break;
+  case ParsedAttr::AT_FloorImageDataType:
+    handleFloorImageDataTypeAttr(S, D, AL);
+    break;
+  case ParsedAttr::AT_FloorImageFlags:
+    handleFloorImageFlagsAttr(S, D, AL);
+    break;
+  case ParsedAttr::AT_VectorCompat:
+    handleSimpleAttribute<VectorCompatAttr>(S, D, AL);
+    break;
+  case ParsedAttr::AT_GraphicsFBOColorLocation:
+    handleGraphicsFBOColorLocationAttr(S, D, AL);
+    break;
+  case ParsedAttr::AT_GraphicsFBODepthType:
+    handleGraphicsFBODepthTypeAttr(S, D, AL);
+    break;
+  case ParsedAttr::AT_GraphicsVertexPosition:
+    handleSimpleAttribute<GraphicsVertexPositionAttr>(S, D, AL);
+    break;
+  case ParsedAttr::AT_GraphicsPointSize:
+    handleSimpleAttribute<GraphicsPointSizeAttr>(S, D, AL);
+    break;
+  case ParsedAttr::AT_GraphicsStageInput:
+    handleSimpleAttribute<GraphicsStageInputAttr>(S, D, AL);
+    break;
   case ParsedAttr::AT_Cleanup:
     handleCleanupAttr(S, D, AL);
     break;
@@ -8304,9 +8461,6 @@ static void ProcessDeclAttribute(Sema &S, Scope *scope, Decl *D,
   case ParsedAttr::AT_Owner:
   case ParsedAttr::AT_Pointer:
     handleLifetimeCategoryAttr(S, D, AL);
-    break;
-  case ParsedAttr::AT_OpenCLAccess:
-    handleOpenCLAccessAttr(S, D, AL);
     break;
   case ParsedAttr::AT_OpenCLNoSVM:
     handleOpenCLNoSVMAttr(S, D, AL);
@@ -8555,7 +8709,7 @@ void Sema::ProcessDeclAttributeList(Scope *S, Decl *D,
   // good to have a way to specify "these attributes must appear as a group",
   // for these. Additionally, it would be good to have a way to specify "these
   // attribute must never appear as a group" for attributes like cold and hot.
-  if (!D->hasAttr<OpenCLKernelAttr>()) {
+  if (!D->hasAttr<ComputeKernelAttr>() && !D->hasAttr<GraphicsTessellationControlShaderAttr>()) {
     // These attributes cannot be applied to a non-kernel function.
     if (const auto *A = D->getAttr<ReqdWorkGroupSizeAttr>()) {
       // FIXME: This emits a different error message than
@@ -8571,7 +8725,7 @@ void Sema::ProcessDeclAttributeList(Scope *S, Decl *D,
     } else if (const auto *A = D->getAttr<OpenCLIntelReqdSubGroupSizeAttr>()) {
       Diag(D->getLocation(), diag::err_opencl_kernel_attr) << A;
       D->setInvalidDecl();
-    } else if (!D->hasAttr<CUDAGlobalAttr>()) {
+    } else if (!D->hasAttr<ComputeKernelAttr>()) {
       if (const auto *A = D->getAttr<AMDGPUFlatWorkGroupSizeAttr>()) {
         Diag(D->getLocation(), diag::err_attribute_wrong_decl_type)
             << A << ExpectedKernelFunction;

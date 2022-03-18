@@ -307,7 +307,9 @@ void TargetLoweringObjectFileELF::emitModuleMetadata(MCStreamer &Streamer,
                                                      Module &M) const {
   auto &C = getContext();
 
-  if (NamedMDNode *LinkerOptions = M.getNamedMetadata("llvm.linker.options")) {
+  // we do not want to emit this for host-compute
+  if (NamedMDNode *LinkerOptions = M.getNamedMetadata("llvm.linker.options");
+      LinkerOptions && llvm::Triple(M.getTargetTriple()).getEnvironment() != llvm::Triple::EnvironmentType::FloorHostCompute) {
     auto *S = C.getELFSection(".linker-options", ELF::SHT_LLVM_LINKER_OPTIONS,
                               ELF::SHF_EXCLUDE);
 

@@ -373,6 +373,7 @@ CheckExtVectorComponent(Sema &S, QualType baseType, ExprValueKind &VK,
     if (HexSwizzle)
       compStr++;
 
+    // TODO: add SPIR pass to scalarize all non-{1,2,3,4,8,16} vector uses
     while (*compStr) {
       if (!vecType->isAccessorWithinNumElements(*compStr++, HexSwizzle)) {
         S.Diag(OpLoc, diag::err_ext_vector_component_exceeds_length)
@@ -1803,7 +1804,8 @@ Sema::BuildFieldReferenceExpr(Expr *BaseExpr, bool IsArrow,
     Qualifiers MemberQuals =
         Context.getCanonicalType(MemberType).getQualifiers();
 
-    assert(!MemberQuals.hasAddressSpace());
+    // this should very well be possible
+    //assert(!MemberQuals.hasAddressSpace());
 
     Qualifiers Combined = BaseQuals + MemberQuals;
     if (Combined != MemberQuals)

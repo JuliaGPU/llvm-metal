@@ -48,10 +48,10 @@ public:
     _LIBCPP_INLINE_VISIBILITY explicit raw_storage_iterator(_OutputIterator __x) : __x_(__x) {}
     _LIBCPP_INLINE_VISIBILITY raw_storage_iterator& operator*() {return *this;}
     _LIBCPP_INLINE_VISIBILITY raw_storage_iterator& operator=(const _Tp& __element)
-        {::new ((void*)_VSTD::addressof(*__x_)) _Tp(__element); return *this;}
+        {::new ((void*)__builtin_addressof(*__x_)) _Tp(__element); return *this;}
 #if _LIBCPP_STD_VER >= 14
     _LIBCPP_INLINE_VISIBILITY raw_storage_iterator& operator=(_Tp&& __element)
-        {::new ((void*)_VSTD::addressof(*__x_)) _Tp(_VSTD::move(__element)); return *this;}
+        {::new ((void*)__builtin_addressof(*__x_)) _Tp(_VSTD::move(__element)); return *this;}
 #endif
     _LIBCPP_INLINE_VISIBILITY raw_storage_iterator& operator++() {++__x_; return *this;}
     _LIBCPP_INLINE_VISIBILITY raw_storage_iterator  operator++(int)

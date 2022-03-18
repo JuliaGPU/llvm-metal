@@ -3464,7 +3464,11 @@ bool NewGVN::runGVN() {
   Changed |= !InstructionsToErase.empty();
 
   // Delete all unreachable blocks.
+  // NOTE: for Vulkan, ignore fake continue blocks
+  const auto is_vulkan = Triple(F.getParent()->getTargetTriple()).getEnvironment() == Triple::EnvironmentType::Vulkan;
   auto UnreachableBlockPred = [&](const BasicBlock &BB) {
+    if (is_vulkan && BB.getName().endswith(".fake_continue"))
+      return false;
     return !ReachableBlocks.count(&BB);
   };
 

@@ -9,6 +9,7 @@ set(LLVM_LINK_COMPONENTS
   CodeGen
   Core
   IRReader
+  LibFloor
   MC
   MIRParser
   Remarks

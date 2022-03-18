@@ -151,7 +151,7 @@ struct __hash_key_value_types {
   }
   _LIBCPP_INLINE_VISIBILITY
   static __container_value_type* __get_ptr(__node_value_type& __n) {
-    return _VSTD::addressof(__n);
+    return __builtin_addressof(__n);
   }
   _LIBCPP_INLINE_VISIBILITY
   static __container_value_type&& __move(__node_value_type& __v) {
@@ -191,7 +191,7 @@ struct __hash_key_value_types<__hash_value_type<_Key, _Tp> > {
 
   _LIBCPP_INLINE_VISIBILITY
   static __container_value_type* __get_ptr(__node_value_type& __n) {
-    return _VSTD::addressof(__n.__get_value());
+    return __builtin_addressof(__n.__get_value());
   }
   _LIBCPP_INLINE_VISIBILITY
   static pair<key_type&&, mapped_type&&> __move(__node_value_type& __v) {
@@ -1571,7 +1571,7 @@ __hash_table<_Tp, _Hash, _Equal, _Alloc>::__deallocate_node(__next_pointer __np)
             {
                 (*__p)->__c_ = nullptr;
                 if (--__c->end_ != __p)
-                    _VSTD::memmove(__p, __p+1, (__c->end_ - __p)*sizeof(__i_node*));
+                    __builtin_memmove(__p, __p+1, (__c->end_ - __p)*sizeof(__i_node*));
             }
         }
         __get_db()->unlock();
@@ -2599,7 +2599,7 @@ __hash_table<_Tp, _Hash, _Equal, _Alloc>::remove(const_iterator __p) _NOEXCEPT
         {
             (*__dp)->__c_ = nullptr;
             if (--__c->end_ != __dp)
-                _VSTD::memmove(__dp, __dp+1, (__c->end_ - __dp)*sizeof(__i_node*));
+                __builtin_memmove(__dp, __dp+1, (__c->end_ - __dp)*sizeof(__i_node*));
         }
     }
     __get_db()->unlock();

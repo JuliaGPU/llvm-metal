@@ -214,6 +214,9 @@ public:
       return true;
     }
   }
+
+  // necessary for compat with llvm 3.2
+  MDTuple* contained_node { nullptr };
 };
 
 /// Generic tagged DWARF-like metadata node.
@@ -528,6 +531,7 @@ public:
 /// TODO: Merge with directory/file node (including users).
 /// TODO: Canonicalize paths on creation.
 class DIFile : public DIScope {
+public: // NOTE: made this public for SPIRVReader
   friend class LLVMContextImpl;
   friend class MDNode;
 
@@ -1818,6 +1822,7 @@ public:
 
 /// Subprogram description.
 class DISubprogram : public DILocalScope {
+public: // NOTE: made this public for SPIRVReader
   friend class LLVMContextImpl;
   friend class MDNode;
 
@@ -1868,6 +1873,9 @@ public:
         (IsOptimized ? SPFlagOptimized : SPFlagZero) |
         (IsMainSubprogram ? SPFlagMainSubprogram : SPFlagZero));
   }
+
+  // necessary for llvm 3.2
+  Function* associated_function { nullptr };
 
 private:
   DIFlags Flags;

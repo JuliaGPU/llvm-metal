@@ -32,3 +32,9 @@ void SPIR64TargetInfo::getTargetDefines(const LangOptions &Opts,
   SPIRTargetInfo::getTargetDefines(Opts, Builder);
   DefineStd(Builder, "SPIR64", Opts);
 }
+
+void AIR64TargetInfo::getTargetDefines(const LangOptions &Opts,
+                                       MacroBuilder &Builder) const {
+  // NOTE: don't define SPIR
+  DefineStd(Builder, "AIR64", Opts);
+}

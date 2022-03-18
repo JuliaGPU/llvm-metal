@@ -908,6 +908,12 @@ bool Sema::containsUnexpandedParameterPacks(Declarator &D) {
   case TST_BFloat16:
 #define GENERIC_IMAGE_TYPE(ImgType, Id) case TST_##ImgType##_t:
 #include "clang/Basic/OpenCLImageTypes.def"
+  case TST_sampler_t:
+  case TST_event_t:
+  case TST_queue_t:
+  case TST_clk_event_t:
+  case TST_reserve_id_t:
+  case TST_patch_control_point_t:
   case TST_unknown_anytype:
   case TST_error:
     break;

@@ -459,8 +459,33 @@ public:
   /// Add the qualifiers from the given set to this set, given that
   /// they don't conflict.
   void addConsistentQualifiers(Qualifiers qs) {
-    assert(getAddressSpace() == qs.getAddressSpace() ||
-           !hasAddressSpace() || !qs.hasAddressSpace());
+    // fix address space, otherwise assert
+    if ((!hasAddressSpace() && qs.hasAddressSpace()) ||
+        (hasAddressSpace() && !qs.hasAddressSpace())) {
+      // -> adding an address space or keeping an existing address space, let it pass
+    } else if (getAddressSpace() == qs.getAddressSpace()) {
+      // -> both have the same address space, all okay
+    } else {
+      // -> different address spaces
+      if (getAddressSpace() == LangAS::Default ||
+          getAddressSpace() == LangAS::opencl_private ||
+          getAddressSpace() == LangAS::opencl_generic) {
+        // allow adjustment to new address space for private/generic,
+        // this usually happens when going to a more specific one
+        removeAddressSpace();
+      } else if (qs.getAddressSpace() == LangAS::Default ||
+                 qs.getAddressSpace() == LangAS::opencl_private ||
+                 qs.getAddressSpace() == LangAS::opencl_generic) {
+        // ignore less specific address space
+        qs.removeAddressSpace();
+      } else {
+        // really mismatching address space
+        // -> assert and keep original
+        assert(false && "address space mismatch");
+        qs.removeAddressSpace();
+      }
+    }
+
     assert(getObjCGCAttr() == qs.getObjCGCAttr() ||
            !hasObjCGCAttr() || !qs.hasObjCGCAttr());
     assert(getObjCLifetime() == qs.getObjCLifetime() ||
@@ -475,7 +500,18 @@ public:
   ///   every address space is a superset of itself.
   /// CL2.0 adds:
   ///   __generic is a superset of any address space except for __constant.
-  static bool isAddressSpaceSupersetOf(LangAS A, LangAS B) {
+  static bool isAddressSpaceSupersetOf(LangAS A, LangAS B, bool check_as = true,
+                                       bool allow_default_as_cast = false) {
+    if (allow_default_as_cast) {
+      if (A == LangAS::Default || B == LangAS::Default) {
+        return true;
+      }
+    }
+
+    if (!check_as) {
+      return true; // !check_as -> always pass
+    }
+
     // Address spaces must match exactly.
     return A == B ||
            // Otherwise in OpenCLC v2.0 s6.5.5: every address space except
@@ -505,15 +541,18 @@ public:
 
   /// Returns true if the address space in these qualifiers is equal to or
   /// a superset of the address space in the argument qualifiers.
-  bool isAddressSpaceSupersetOf(Qualifiers other) const {
-    return isAddressSpaceSupersetOf(getAddressSpace(), other.getAddressSpace());
+  bool isAddressSpaceSupersetOf(Qualifiers other, bool check_as = true,
+                                bool allow_default_as_cast = false) const {
+    return isAddressSpaceSupersetOf(getAddressSpace(), other.getAddressSpace(),
+                                    check_as, allow_default_as_cast);
   }
 
   /// Determines if these qualifiers compatibly include another set.
   /// Generally this answers the question of whether an object with the other
   /// qualifiers can be safely used as an object with these qualifiers.
-  bool compatiblyIncludes(Qualifiers other) const {
-    return isAddressSpaceSupersetOf(other) &&
+  bool compatiblyIncludes(Qualifiers other, bool check_as = true,
+                          bool allow_default_as_cast = false) const {
+    return isAddressSpaceSupersetOf(other, check_as, allow_default_as_cast) &&
            // ObjC GC qualifiers can match, be added, or be removed, but can't
            // be changed.
            (getObjCGCAttr() == other.getObjCGCAttr() || !hasObjCGCAttr() ||
@@ -1999,6 +2038,7 @@ public:
   bool isComplexType() const;      // C99 6.2.5p11 (complex)
   bool isAnyComplexType() const;   // C99 6.2.5p11 (complex) + Complex Int.
   bool isFloatingType() const;     // C99 6.2.5p11 (real floating + complex)
+  bool isDoubleType() const;       // (double + long double)
   bool isHalfType() const;         // OpenCL 6.1.1.1, NEON (IEEE 754-2008 half)
   bool isFloat16Type() const;      // C11 extension ISO/IEC TS 18661
   bool isBFloat16Type() const;
@@ -2011,6 +2051,12 @@ public:
   bool isAggregateType() const;
   bool isFundamentalType() const;
   bool isCompoundType() const;
+
+  // Vector categories
+  bool isFloatingVecType() const;
+  bool isDoubleVecType() const;
+  bool isIntegerVecType() const;
+  bool isRealVecType() const;
 
   // Type Predicates: Check to see if this type is structurally the specified
   // type, ignoring typedefs and qualifiers.
@@ -2114,11 +2160,16 @@ public:
 
   bool isImageType() const;                     // Any OpenCL image type
 
+  bool isAggregateImageType() const;            // struct/class containing only image*_t members
+  bool isArrayImageType(bool single_field_arr) const; // array of aggregate images
+
   bool isSamplerT() const;                      // OpenCL sampler_t
   bool isEventT() const;                        // OpenCL event_t
   bool isClkEventT() const;                     // OpenCL clk_event_t
   bool isQueueT() const;                        // OpenCL queue_t
   bool isReserveIDT() const;                    // OpenCL reserve_id_t
+  bool isExecType() const;                      // OpenCL 2.0 execution model types
+  bool isPatchControlPointT() const;            // Metal/Vulkan patch control point
 
 #define EXT_OPAQUE_TYPE(ExtType, Id, Ext) \
   bool is##Id##Type() const;
@@ -6591,7 +6642,7 @@ inline FunctionType::ExtInfo getFunctionExtInfo(QualType t) {
 inline bool QualType::isMoreQualifiedThan(QualType other) const {
   Qualifiers MyQuals = getQualifiers();
   Qualifiers OtherQuals = other.getQualifiers();
-  return (MyQuals != OtherQuals && MyQuals.compatiblyIncludes(OtherQuals));
+  return (MyQuals != OtherQuals && MyQuals.compatiblyIncludes(OtherQuals, false));
 }
 
 /// Determine whether this type is at last
@@ -6605,7 +6656,7 @@ inline bool QualType::isAtLeastAsQualifiedAs(QualType other) const {
   if (getUnqualifiedType()->isVoidType())
     OtherQuals.removeUnaligned();
 
-  return getQualifiers().compatiblyIncludes(OtherQuals);
+  return getQualifiers().compatiblyIncludes(OtherQuals, false);
 }
 
 /// If Type is a reference type (e.g., const
@@ -6876,6 +6927,15 @@ inline bool Type::isReserveIDT() const {
   return isSpecificBuiltinType(BuiltinType::OCLReserveID);
 }
 
+inline bool Type::isExecType() const {
+  return isSpecificBuiltinType(BuiltinType::OCLQueue) ||
+         isSpecificBuiltinType(BuiltinType::OCLClkEvent);
+}
+
+inline bool Type::isPatchControlPointT() const {
+  return isSpecificBuiltinType(BuiltinType::OCLPatchControlPoint);
+}
+
 inline bool Type::isImageType() const {
 #define IMAGE_TYPE(ImgType, Id, SingletonId, Access, Suffix) is##Id##Type() ||
   return
@@ -6914,7 +6974,8 @@ inline bool Type::isOCLExtOpaqueType() const {
 
 inline bool Type::isOpenCLSpecificType() const {
   return isSamplerT() || isEventT() || isImageType() || isClkEventT() ||
-         isQueueT() || isReserveIDT() || isPipeType() || isOCLExtOpaqueType();
+         isQueueT() || isReserveIDT() || isPipeType() || isOCLExtOpaqueType() ||
+         isPatchControlPointT() || isAggregateImageType();
 }
 
 inline bool Type::isTemplateTypeParmType() const {

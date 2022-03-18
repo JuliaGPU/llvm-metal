@@ -41,10 +41,11 @@ using namespace llvm;
 
 // LSV is still relatively new; this switch lets us turn it off in case we
 // encounter (or suspect) a bug.
+// TODO/NOTE: don't want this when under register pressure
 static cl::opt<bool>
     DisableLoadStoreVectorizer("disable-nvptx-load-store-vectorizer",
                                cl::desc("Disable load/store vectorizer"),
-                               cl::init(false), cl::Hidden);
+                               cl::init(true), cl::Hidden);
 
 // TODO: Remove this flag when we are confident with no regressions.
 static cl::opt<bool> DisableRequireStructuredCFG(

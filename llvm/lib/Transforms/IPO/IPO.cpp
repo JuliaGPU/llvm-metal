@@ -39,6 +39,7 @@ void llvm::initializeIPO(PassRegistry &Registry) {
   initializeHotColdSplittingLegacyPassPass(Registry);
   initializeIROutlinerLegacyPassPass(Registry);
   initializeAlwaysInlinerLegacyPassPass(Registry);
+  initializeEverythingInlinerPass(Registry);
   initializeSimpleInlinerPass(Registry);
   initializeInferFunctionAttrsLegacyPassPass(Registry);
   initializeInternalizeLegacyPassPass(Registry);
@@ -96,6 +97,10 @@ void LLVMAddFunctionInliningPass(LLVMPassManagerRef PM) {
 
 void LLVMAddAlwaysInlinerPass(LLVMPassManagerRef PM) {
   unwrap(PM)->add(llvm::createAlwaysInlinerLegacyPass());
+}
+
+void LLVMAddEverythingInlinerPass(LLVMPassManagerRef PM) {
+  unwrap(PM)->add(llvm::createEverythingInlinerPass());
 }
 
 void LLVMAddGlobalDCEPass(LLVMPassManagerRef PM) {

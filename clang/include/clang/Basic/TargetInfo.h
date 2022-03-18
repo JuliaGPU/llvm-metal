@@ -182,6 +182,7 @@ enum OpenCLTypeKind : uint8_t {
   OCLTK_Queue,
   OCLTK_ReserveID,
   OCLTK_Sampler,
+  OCLTK_PatchControlPoint,
 };
 
 /// Exposes information about the current target.
@@ -1471,6 +1472,7 @@ public:
       default:
         return CCCR_Warning;
       case CC_C:
+      case CC_FloorKernel:
         return CCCR_OK;
     }
   }

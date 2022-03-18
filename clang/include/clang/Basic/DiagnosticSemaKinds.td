@@ -10085,6 +10085,8 @@ def err_event_t_addr_space_qual : Error<
   "the event_t type can only be used with __private address space qualifier">;
 def err_expected_kernel_void_return_type : Error<
   "kernel must have void return type">;
+def err_pointer_to_image : Error<
+  "pointer to image is invalid">;
 def err_sampler_initializer_not_integer : Error<
   "sampler_t initialization requires 32-bit integer, not %0">;
 def warn_sampler_initializer_invalid_bits : Warning<

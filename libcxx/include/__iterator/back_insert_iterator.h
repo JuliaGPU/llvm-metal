@@ -45,7 +45,7 @@ public:
     typedef void reference;
     typedef _Container container_type;
 
-    _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_AFTER_CXX17 explicit back_insert_iterator(_Container& __x) : container(_VSTD::addressof(__x)) {}
+    _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_AFTER_CXX17 explicit back_insert_iterator(_Container& __x) : container(__builtin_addressof(__x)) {}
     _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_AFTER_CXX17 back_insert_iterator& operator=(const typename _Container::value_type& __value_)
         {container->push_back(__value_); return *this;}
 #ifndef _LIBCPP_CXX03_LANG

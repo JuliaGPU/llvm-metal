@@ -1266,7 +1266,7 @@ ExprResult Parser::ParseLambdaExpressionAfterIntroducer(
       for (const ParsedAttr &A : Attr)
         if (A.getKind() == ParsedAttr::AT_CUDADevice ||
             A.getKind() == ParsedAttr::AT_CUDAHost ||
-            A.getKind() == ParsedAttr::AT_CUDAGlobal)
+            A.getKind() == ParsedAttr::AT_ComputeKernel)
           Diag(A.getLoc(), diag::warn_cuda_attr_lambda_position)
               << A.getAttrName()->getName();
   };
@@ -1357,13 +1357,6 @@ ExprResult Parser::ParseLambdaExpressionAfterIntroducer(
         // Parse attribute-specifier[opt].
         MaybeParseCXX11Attributes(Attr, &DeclEndLoc);
 
-        // Parse OpenCL addr space attribute.
-        if (Tok.isOneOf(tok::kw___private, tok::kw___global, tok::kw___local,
-                        tok::kw___constant, tok::kw___generic)) {
-          ParseOpenCLQualifiers(DS.getAttributes());
-          ConsumeToken();
-        }
-
         SourceLocation FunLocalRangeEnd = DeclEndLoc;
 
         // Parse trailing-return-type[opt].
@@ -1433,8 +1426,6 @@ ExprResult Parser::ParseLambdaExpressionAfterIntroducer(
       ParseTrailingRequiresClause(D);
   } else if (Tok.isOneOf(tok::kw_mutable, tok::arrow, tok::kw___attribute,
                          tok::kw_constexpr, tok::kw_consteval,
-                         tok::kw___private, tok::kw___global, tok::kw___local,
-                         tok::kw___constant, tok::kw___generic,
                          tok::kw_requires, tok::kw_noexcept) ||
              (Tok.is(tok::l_square) && NextToken().is(tok::l_square))) {
     if (!getLangOpts().CPlusPlus2b)
@@ -2271,12 +2262,6 @@ void Parser::ParseCXXSimpleTypeSpecifier(DeclSpec &DS) {
   case tok::kw_bool:
     DS.SetTypeSpecType(DeclSpec::TST_bool, Loc, PrevSpec, DiagID, Policy);
     break;
-#define GENERIC_IMAGE_TYPE(ImgType, Id)                                        \
-  case tok::kw_##ImgType##_t:                                                  \
-    DS.SetTypeSpecType(DeclSpec::TST_##ImgType##_t, Loc, PrevSpec, DiagID,     \
-                       Policy);                                                \
-    break;
-#include "clang/Basic/OpenCLImageTypes.def"
 
   case tok::annot_decltype:
   case tok::kw_decltype:

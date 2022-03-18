@@ -970,9 +970,23 @@ void TypePrinter::printFunctionAfter(const FunctionType::ExtInfo &Info,
     case CC_X86RegCall:
       OS << " __attribute__((regcall))";
       break;
-    case CC_SpirFunction:
-    case CC_OpenCLKernel:
-      // Do nothing. These CCs are not available as attributes.
+    case CC_FloorFunction:
+      OS << "floor_function";
+      break;
+    case CC_FloorKernel:
+      OS << "floor_kernel";
+      break;
+    case CC_FloorVertex:
+      OS << "floor_vertex";
+      break;
+    case CC_FloorFragment:
+      OS << "floor_fragment";
+      break;
+    case CC_FloorTessControl:
+      OS << "floor_tessellation_control";
+      break;
+    case CC_FloorTessEval:
+      OS << "floor_tessellation_evaluation";
       break;
     case CC_Swift:
       OS << " __attribute__((swiftcall))";
@@ -1672,13 +1686,11 @@ void TypePrinter::printAttributedAfter(const AttributedType *T,
 #include "clang/Basic/AttrList.inc"
     llvm_unreachable("non-type attribute attached to type");
 
-  case attr::OpenCLPrivateAddressSpace:
-  case attr::OpenCLGlobalAddressSpace:
-  case attr::OpenCLGlobalDeviceAddressSpace:
-  case attr::OpenCLGlobalHostAddressSpace:
-  case attr::OpenCLLocalAddressSpace:
-  case attr::OpenCLConstantAddressSpace:
-  case attr::OpenCLGenericAddressSpace:
+  case attr::PrivateAddressSpace:
+  case attr::GlobalAddressSpace:
+  case attr::LocalAddressSpace:
+  case attr::ConstantAddressSpace:
+  case attr::GenericAddressSpace:
     // FIXME: Update printAttributedBefore to print these once we generate
     // AttributedType nodes for them.
     break;
@@ -1718,6 +1730,12 @@ void TypePrinter::printAttributedAfter(const AttributedType *T,
   case attr::MSABI: OS << "ms_abi"; break;
   case attr::SysVABI: OS << "sysv_abi"; break;
   case attr::RegCall: OS << "regcall"; break;
+  case attr::ComputeKernel: OS << "floor_kernel"; break;
+  case attr::GraphicsFragmentShader: OS << "floor_fragment"; break;
+  case attr::GraphicsVertexShader: OS << "floor_vertex"; break;
+  case attr::GraphicsTessellationControlShader: OS << "floor_tessellation_control"; break;
+  case attr::GraphicsTessellationEvaluationShader: OS << "floor_tessellation_evaluation"; break;
+  case attr::FloorArgBuffer: OS << "floor_arg_buffer"; break;
   case attr::Pcs: {
     OS << "pcs(";
    QualType t = T->getEquivalentType();
@@ -2131,29 +2149,29 @@ std::string Qualifiers::getAddrSpaceAsString(LangAS AS) {
     return "";
   case LangAS::opencl_global:
   case LangAS::sycl_global:
-    return "__global";
+    return "__global_as";
   case LangAS::opencl_local:
   case LangAS::sycl_local:
-    return "__local";
+    return "__local_as";
   case LangAS::opencl_private:
   case LangAS::sycl_private:
-    return "__private";
+    return "__private_as";
   case LangAS::opencl_constant:
-    return "__constant";
+    return "__constant_as";
   case LangAS::opencl_generic:
-    return "__generic";
+    return "__generic_as";
   case LangAS::opencl_global_device:
   case LangAS::sycl_global_device:
-    return "__global_device";
+    return "__global_device_as";
   case LangAS::opencl_global_host:
   case LangAS::sycl_global_host:
-    return "__global_host";
+    return "__global_host_as";
   case LangAS::cuda_device:
-    return "__device__";
+    return "__cuda_device__";
   case LangAS::cuda_constant:
-    return "__constant__";
+    return "__cuda_constant__";
   case LangAS::cuda_shared:
-    return "__shared__";
+    return "__cuda_shared__";
   case LangAS::ptr32_sptr:
     return "__sptr __ptr32";
   case LangAS::ptr32_uptr:

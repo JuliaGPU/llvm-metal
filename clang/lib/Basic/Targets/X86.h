@@ -32,6 +32,7 @@ static const unsigned X86AddrSpaceMap[] = {
     0,   // opencl_generic
     0,   // opencl_global_device
     0,   // opencl_global_host
+    0,   // vulkan_input
     0,   // cuda_device
     0,   // cuda_constant
     0,   // cuda_shared
@@ -156,6 +157,10 @@ public:
     LongDoubleFormat = &llvm::APFloat::x87DoubleExtended();
     AddrSpaceMap = &X86AddrSpaceMap;
     HasStrictFP = true;
+
+    // enable fp16
+    HasLegalHalfType = false;
+    HasFloat16 = true;
 
     bool IsWinCOFF =
         getTriple().isOSWindows() && getTriple().isOSBinFormatCOFF();
@@ -357,7 +362,7 @@ public:
     case CC_Swift:
     case CC_X86Pascal:
     case CC_IntelOclBicc:
-    case CC_OpenCLKernel:
+    case CC_FloorKernel:
       return CCCR_OK;
     case CC_SwiftAsync:
       return CCCR_Error;
@@ -728,7 +733,7 @@ public:
     case CC_PreserveMost:
     case CC_PreserveAll:
     case CC_X86RegCall:
-    case CC_OpenCLKernel:
+    case CC_FloorKernel:
       return CCCR_OK;
     default:
       return CCCR_Warning;
@@ -805,7 +810,7 @@ public:
     case CC_Swift:
     case CC_SwiftAsync:
     case CC_X86RegCall:
-    case CC_OpenCLKernel:
+    case CC_FloorKernel:
       return CCCR_OK;
     default:
       return CCCR_Warning;

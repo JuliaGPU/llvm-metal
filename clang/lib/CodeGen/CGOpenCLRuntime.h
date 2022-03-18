@@ -97,6 +97,46 @@ public:
   llvm::Function *getInvokeFunction(const Expr *E);
 };
 
+class Ocl20Mangler {
+public:
+  Ocl20Mangler(llvm::SmallVectorImpl<char>&);
+
+  // \brief Appends the mangled representation of reserve_id_t parameter to the
+  //  mangled string.
+  Ocl20Mangler& appendReservedId();
+
+  // \brief Appends the mangled representation of pipe_t parameter to the
+  //  mangled string.
+  Ocl20Mangler& appendPipe();
+
+  // \brief Appends the mangled representation of 'int' parameter to the
+  //  mangled string.
+  Ocl20Mangler& appendInt();
+
+  // \brief Appends the mangled representation of 'unsigned int' parameter to the
+  // mangled string.
+  Ocl20Mangler& appendUint();
+
+  // \brief Appends the mangled representation of a pointer.
+  Ocl20Mangler& appendPointer();
+
+  // \brief Appends the mangled representation of void.
+  Ocl20Mangler& appendVoid();
+
+  // \brief Appends the mangled representation of a pointer with a given address
+  // space.
+  // \param addressSapace The address space of the pointer. Valid values are
+  // [0,4].
+  Ocl20Mangler& appendPointer(int addressSapace);
+
+private:
+
+  // \brief Appends the given string to the mangled prototype.
+  Ocl20Mangler& appendString(llvm::StringRef);
+
+  llvm::SmallVectorImpl<char> *MangledString;
+};
+
 }
 }
 

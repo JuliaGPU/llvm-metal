@@ -184,6 +184,9 @@ public:
 
   void mangleLambdaSig(const CXXRecordDecl *Lambda, raw_ostream &) override;
 
+  void mangleMetalFieldName(const FieldDecl *D, const CXXRecordDecl* RD, raw_ostream &) override;
+  void mangleMetalGeneric(const std::string& name, QualType Ty, const CXXRecordDecl* RD, raw_ostream &) override;
+
   bool getNextDiscriminator(const NamedDecl *ND, unsigned &disc) {
     // Lambda closure types are already numbered.
     if (isLambda(ND))
@@ -473,6 +476,7 @@ public:
   void mangleType(QualType T);
   void mangleNameOrStandardSubstitution(const NamedDecl *ND);
   void mangleLambdaSig(const CXXRecordDecl *Lambda);
+  void mangleMetalFieldName(const FieldDecl *D, const CXXRecordDecl* RD);
 
 private:
 
@@ -1436,7 +1440,7 @@ void CXXNameMangler::mangleUnqualifiedName(GlobalDecl GD,
                        FD->getType()->castAs<FunctionType>()->getCallConv() ==
                            clang::CC_X86RegCall;
       bool IsDeviceStub =
-          FD && FD->hasAttr<CUDAGlobalAttr>() &&
+          FD && FD->hasAttr<ComputeKernelAttr>() &&
           GD.getKernelReferenceKind() == KernelReferenceKind::Stub;
       if (IsDeviceStub)
         mangleDeviceStubName(II);
@@ -2714,7 +2718,7 @@ static bool isTypeSubstitutable(Qualifiers Quals, const Type *Ty,
   if (Ty->isSpecificBuiltinType(BuiltinType::ObjCSel))
     return true;
   if (Ty->isOpenCLSpecificType())
-    return true;
+    return false;
   if (Ty->isBuiltinType())
     return false;
   // Through to Clang 6.0, we accidentally treated undeduced auto types as
@@ -2793,7 +2797,8 @@ void CXXNameMangler::mangleType(QualType T) {
   const Type *ty = split.Ty;
 
   bool isSubstitutable =
-    isTypeSubstitutable(quals, ty, Context.getASTContext());
+    isTypeSubstitutable(quals, ty, Context.getASTContext()) &&
+    !(Context.getASTContext().getLangOpts().OpenCL && isa<ExtVectorType>(T));
   if (isSubstitutable && mangleSubstitution(T))
     return;
 
@@ -2843,6 +2848,30 @@ void CXXNameMangler::mangleType(QualType T) {
 void CXXNameMangler::mangleNameOrStandardSubstitution(const NamedDecl *ND) {
   if (!mangleStandardSubstitution(ND))
     mangleName(ND);
+}
+
+void CXXNameMangler::mangleMetalFieldName(const FieldDecl *D, const CXXRecordDecl* RD) {
+	const DeclContext *DC = IgnoreLinkageSpecDecls(getEffectiveDeclContext(D));
+	const DeclContext *PDC = IgnoreLinkageSpecDecls(getEffectiveDeclContext(RD));
+	
+	if(const auto II = D->getIdentifier()) {
+		// TODO: need actual parent field entry for all nested types
+		if(DC->getParent()->Equals(PDC)) {
+			mangleSourceName(II);
+		}
+	}
+	
+	// top level: mangle directly (without enclosing record decl / PDC)
+	// all else: mangle nested type as well
+	if(!DC->getParent()->Equals(PDC)) {
+		if (GetLocalClassDecl(D)) {
+			mangleLocalName(D, nullptr);
+		}
+		else {
+			mangleNestedName(D, DC, nullptr);
+		}
+	}
+	mangleType(D->getType());
 }
 
 void CXXNameMangler::mangleType(const BuiltinType *T) {
@@ -3024,7 +3053,7 @@ void CXXNameMangler::mangleType(const BuiltinType *T) {
     break;
 #define IMAGE_TYPE(ImgType, Id, SingletonId, Access, Suffix) \
   case BuiltinType::Id: \
-    type_name = "ocl_" #ImgType "_" #Suffix; \
+    type_name = "ocl_" #ImgType; \
     Out << type_name.size() << type_name; \
     break;
 #include "clang/Basic/OpenCLImageTypes.def"
@@ -3042,6 +3071,9 @@ void CXXNameMangler::mangleType(const BuiltinType *T) {
     break;
   case BuiltinType::OCLReserveID:
     Out << "13ocl_reserveid";
+    break;
+  case BuiltinType::OCLPatchControlPoint:
+    Out << "24__patch_control_point_t";
     break;
 #define EXT_OPAQUE_TYPE(ExtType, Id, Ext) \
   case BuiltinType::Id: \
@@ -3094,8 +3126,12 @@ StringRef CXXNameMangler::getCallingConvQualifierName(CallingConv CC) {
   case CC_AAPCS_VFP:
   case CC_AArch64VectorCall:
   case CC_IntelOclBicc:
-  case CC_SpirFunction:
-  case CC_OpenCLKernel:
+  case CC_FloorFunction:
+  case CC_FloorKernel:
+  case CC_FloorVertex:
+  case CC_FloorFragment:
+  case CC_FloorTessControl:
+  case CC_FloorTessEval:
   case CC_PreserveMost:
   case CC_PreserveAll:
     // FIXME: we should be mangling all of the above.
@@ -6418,6 +6454,28 @@ void ItaniumMangleContextImpl::mangleLambdaSig(const CXXRecordDecl *Lambda,
                                                raw_ostream &Out) {
   CXXNameMangler Mangler(*this, Out);
   Mangler.mangleLambdaSig(Lambda);
+}
+
+void ItaniumMangleContextImpl::mangleMetalFieldName(const FieldDecl *D, const CXXRecordDecl* RD, raw_ostream &Out) {
+	assert(isa<FieldDecl>(D) &&
+		   "Invalid mangleName() call, argument is not a field decl!");
+	
+	PrettyStackTraceDecl CrashInfo(D, SourceLocation(),
+								   getASTContext().getSourceManager(),
+								   "Mangling declaration");
+	
+	CXXNameMangler Mangler(*this, Out, D);
+	Mangler.mangleMetalFieldName(D, RD);
+}
+
+void ItaniumMangleContextImpl::mangleMetalGeneric(const std::string& name, QualType Ty,
+												  const CXXRecordDecl* RD, raw_ostream &Out) {
+	CXXNameMangler Mangler(*this, Out, nullptr);
+	if (!name.empty()) {
+		Out << name.size();
+		Out << name;
+	}
+	Mangler.mangleType(Ty);
 }
 
 ItaniumMangleContext *ItaniumMangleContext::create(ASTContext &Context,

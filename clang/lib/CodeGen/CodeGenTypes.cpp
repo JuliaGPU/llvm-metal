@@ -25,6 +25,7 @@
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Module.h"
+#include "llvm/Transforms/LibFloor/FloorImageType.h"
 using namespace clang;
 using namespace CodeGen;
 
@@ -87,7 +88,8 @@ void CodeGenTypes::addRecordTypeName(const RecordDecl *RD,
 /// ConvertType in that it is used to convert to the memory representation for
 /// a type.  For example, the scalar representation for _Bool is i1, but the
 /// memory representation is usually i8 or i32, depending on the target.
-llvm::Type *CodeGenTypes::ConvertTypeForMem(QualType T, bool ForBitField) {
+llvm::Type *CodeGenTypes::ConvertTypeForMem(QualType T, bool ForBitField,
+                                            bool ForRecordField) {
   if (T->isConstantMatrixType()) {
     const Type *Ty = Context.getCanonicalType(T).getTypePtr();
     const ConstantMatrixType *MT = cast<ConstantMatrixType>(Ty);
@@ -95,7 +97,7 @@ llvm::Type *CodeGenTypes::ConvertTypeForMem(QualType T, bool ForBitField) {
                                 MT->getNumRows() * MT->getNumColumns());
   }
 
-  llvm::Type *R = ConvertType(T);
+  llvm::Type *R = ConvertType(T, !ForRecordField);
 
   // If this is a bool type, or an ExtIntType in a bitfield representation,
   // map this integer to the target-specified size.
@@ -392,10 +394,15 @@ llvm::Type *CodeGenTypes::ConvertFunctionTypeInternal(QualType QFT) {
 }
 
 /// ConvertType - Convert the specified type to its LLVM form.
-llvm::Type *CodeGenTypes::ConvertType(QualType T) {
+llvm::Type *CodeGenTypes::ConvertType(QualType T, bool convert_array_image_type) {
   T = Context.getCanonicalType(T);
 
   const Type *Ty = T.getTypePtr();
+
+  // intercept image arrays before RT conversion
+  // NOTE: we do not want this when this is part of a record/struct
+  if (convert_array_image_type && Ty->isArrayImageType(true))
+    return ConvertArrayImageType(Ty);
 
   // For the device-side compilation, CUDA device builtin surface/texture types
   // may be represented in different types.
@@ -539,6 +546,7 @@ llvm::Type *CodeGenTypes::ConvertType(QualType T) {
     case BuiltinType::OCLClkEvent:
     case BuiltinType::OCLQueue:
     case BuiltinType::OCLReserveID:
+    case BuiltinType::OCLPatchControlPoint:
       ResultType = CGM.getOpenCLRuntime().convertOpenCLSpecificType(Ty);
       break;
     case BuiltinType::SveInt8:
@@ -807,6 +815,87 @@ bool CodeGenModule::isPaddedAtomicType(const AtomicType *type) {
   return Context.getTypeSize(type) != Context.getTypeSize(type->getValueType());
 }
 
+/// image type cache for structs with 1 image field and 2 image fields (used below)
+static std::unordered_map<COMPUTE_IMAGE_TYPE, llvm::StructType*> image_type_cache_1if;
+static std::unordered_map<COMPUTE_IMAGE_TYPE, llvm::StructType*> image_type_cache_2if;
+
+/// we need to ensure that image-based types are always unique (for Metal)
+/// -> if this RecordDecl contains an opaque (image) type, check the existing cache of converted image types and
+///    set Entry to a matching StructType if there is one + return { true-if-new, cache-func } if this is an image type
+static std::pair<bool, std::function<void(llvm::StructType*)>>
+handle_image_rdecl(ASTContext& Context, const RecordDecl *RD, llvm::StructType *&Entry) {
+	if (Entry || !Context.getLangOpts().Metal) {
+		return { false, {} };
+	}
+	
+	auto def = RD->getDefinition();
+	if (!def || !def->isCompleteDefinition()) {
+		return { false, {} };
+	}
+	
+	auto pot_img_def = dyn_cast_or_null<ClassTemplateSpecializationDecl>(def);
+	if (!pot_img_def) {
+		return { false, {} };
+	}
+	
+	bool is_all_image_fields = true;
+	uint32_t active_field_count = 0;
+	for (auto field : def->fields()) {
+		if (field->isZeroSize(RD->getASTContext())) {
+			continue;
+		}
+		++active_field_count;
+		if (!field->getType()->isImageType() &&
+			!field->getType()->isArrayImageType(true)) {
+			is_all_image_fields = false;
+			break;
+		}
+	}
+	if (!is_all_image_fields || active_field_count < 1 || active_field_count > 2) {
+		// must have either 1 or 2 image fields, and all fields must be image types
+		return { false, {} };
+	}
+	
+	const auto& templ_args = pot_img_def->getTemplateArgs();
+	if (templ_args.size() == 0) {
+		return { false, {} };
+	}
+	const auto& arg_0 = templ_args.get(0);
+	if (arg_0.getKind() != TemplateArgument::Integral) {
+		return { false, {} };
+	}
+	
+	// mask/bits that we need to identify an opaque image type
+	static constexpr const COMPUTE_IMAGE_TYPE opaque_image_mask {
+		COMPUTE_IMAGE_TYPE::__DIM_MASK |
+		COMPUTE_IMAGE_TYPE::FLAG_DEPTH |
+		COMPUTE_IMAGE_TYPE::FLAG_ARRAY |
+		COMPUTE_IMAGE_TYPE::FLAG_BUFFER |
+		COMPUTE_IMAGE_TYPE::FLAG_CUBE |
+		COMPUTE_IMAGE_TYPE::FLAG_MSAA
+	};
+	const auto image_type = (COMPUTE_IMAGE_TYPE)arg_0.getAsIntegral().getZExtValue();
+	const auto masked_image_type = image_type & opaque_image_mask;
+	
+	// check if we have a cached entry, return it if so
+	std::unordered_map<COMPUTE_IMAGE_TYPE, llvm::StructType*>& cache =
+		(active_field_count == 1 ? image_type_cache_1if : image_type_cache_2if);
+	auto iter = cache.find(masked_image_type);
+	if (iter != cache.end()) {
+		Entry = iter->second;
+		return { true, {} };
+	}
+	
+	// this is a new image type, provide cache function
+	std::function<void(llvm::StructType*)> cache_func = [masked_image_type, active_field_count](llvm::StructType* type) {
+		std::unordered_map<COMPUTE_IMAGE_TYPE, llvm::StructType*>& cache =
+			(active_field_count == 1 ? image_type_cache_1if : image_type_cache_2if);
+		cache.emplace(masked_image_type, type);
+	};
+	
+	return { true, std::move(cache_func) };
+}
+
 /// ConvertRecordDeclType - Lay out a tagged decl type like struct or union.
 llvm::StructType *CodeGenTypes::ConvertRecordDeclType(const RecordDecl *RD) {
   // TagDecl's are not necessarily unique, instead use the (clang)
@@ -814,6 +903,9 @@ llvm::StructType *CodeGenTypes::ConvertRecordDeclType(const RecordDecl *RD) {
   const Type *Key = Context.getTagDeclType(RD).getTypePtr();
 
   llvm::StructType *&Entry = RecordDeclTypes[Key];
+
+  // we need to ensure that image-based types are always unique (for Metal)
+  auto [is_new_image_rdecl, cache_func] = handle_image_rdecl(Context, RD, Entry);
 
   // If we don't have a StructType at all yet, create the forward declaration.
   if (!Entry) {
@@ -825,7 +917,7 @@ llvm::StructType *CodeGenTypes::ConvertRecordDeclType(const RecordDecl *RD) {
   // If this is still a forward declaration, or the LLVM type is already
   // complete, there's nothing more to do.
   RD = RD->getDefinition();
-  if (!RD || !RD->isCompleteDefinition() || !Ty->isOpaque())
+  if (!RD || !RD->isCompleteDefinition() || (!Ty->isOpaque() && !is_new_image_rdecl))
     return Ty;
 
   // If converting this type would cause us to infinitely loop, don't do it!
@@ -867,12 +959,80 @@ llvm::StructType *CodeGenTypes::ConvertRecordDeclType(const RecordDecl *RD) {
     while (!DeferredRecords.empty())
       ConvertRecordDeclType(DeferredRecords.pop_back_val());
 
+  // cache the image type
+  if (is_new_image_rdecl && cache_func) {
+    cache_func(Ty);
+  }
+
   return Ty;
 }
 
+llvm::Type *CodeGenTypes::ConvertArrayImageType(const Type* Ty) {
+  // ptr to array of images
+  if(Ty->isPointerType() &&
+     Ty->getPointeeType()->isArrayType() &&
+     Ty->getPointeeType()->getArrayElementTypeNoTypeQual()->isImageType()) {
+    return llvm::PointerType::get(ConvertArrayImageType(Ty->getPointeeType().getTypePtr()), 0);
+  }
+	
+  // simple C-style array that contains an image type
+  if(Ty->isArrayType() &&
+     Ty->getArrayElementTypeNoTypeQual()->isImageType()) {
+    const ConstantArrayType *CAT = Context.getAsConstantArrayType(QualType(Ty, 0));
+    const auto elem_type = CAT->getElementType();
+    if(elem_type->isImageType()) {
+      return llvm::ArrayType::get(ConvertType(elem_type), CAT->getSize().getZExtValue());
+    } else if(elem_type->isAggregateImageType()) {
+      // must be an aggregate image with exactly one image
+      const auto agg_img_type = elem_type->getAsCXXRecordDecl();
+      auto agg_img_fields = get_aggregate_scalar_fields(agg_img_type, agg_img_type, false, false,
+                                                        true /* TODO */);
+      if(agg_img_fields.size() != 1) return nullptr;
+      return llvm::ArrayType::get(ConvertType(agg_img_fields[0].type), CAT->getSize().getZExtValue());
+    }
+    assert(false && "invalid array of images type");
+  }
+
+  // must be struct or class, union is not allowed
+  if(!Ty->isStructureOrClassType()) return nullptr;
+
+  // must be a cxx rdecl
+  const auto decl = Ty->getAsCXXRecordDecl();
+  if(!decl) return nullptr;
+
+  // must have definition
+  if(!decl->hasDefinition()) return nullptr;
+
+  // must have exactly one field
+  const auto field_count = std::distance(decl->field_begin(), decl->field_end());
+  if(field_count != 1) return nullptr;
+
+  // field must be an array
+  const QualType arr_field_type = decl->field_begin()->getType();
+  const ConstantArrayType *CAT = Context.getAsConstantArrayType(arr_field_type);
+  if(!CAT) return nullptr;
+
+  // must be an aggregate image with exactly one image
+  const auto agg_img_type = CAT->getElementType()->getAsCXXRecordDecl();
+  auto agg_img_fields = get_aggregate_scalar_fields(agg_img_type, agg_img_type, false, false,
+                                                    true /* TODO */);
+  if(agg_img_fields.size() != 1) return nullptr;
+
+  // got everything we need
+  return llvm::ArrayType::get(ConvertType(agg_img_fields[0].type), CAT->getSize().getZExtValue());
+}
+
+
 /// getCGRecordLayout - Return record layout info for the given record decl.
 const CGRecordLayout &
-CodeGenTypes::getCGRecordLayout(const RecordDecl *RD) {
+CodeGenTypes::getCGRecordLayout(const RecordDecl *RD, llvm::Type* struct_type) {
+  // check if there is a flattened layout for this llvm struct type,
+  // return it if so, otherwise continue as usual
+  if (struct_type != nullptr) {
+    const auto flat_layout = FlattenedCGRecordLayouts.lookup(struct_type);
+    if(flat_layout) return *flat_layout;
+  }
+
   const Type *Key = Context.getTagDeclType(RD).getTypePtr();
 
   auto I = CGRecordLayouts.find(Key);
@@ -887,6 +1047,11 @@ CodeGenTypes::getCGRecordLayout(const RecordDecl *RD) {
   assert(I != CGRecordLayouts.end() &&
          "Unable to find record layout information for type");
   return *I->second;
+}
+
+llvm::Type* CodeGenTypes::getFlattenedRecordType(const CXXRecordDecl* D) const {
+  const auto iter = FlattenedRecords.find_as(D);
+  return (iter != FlattenedRecords.end() ? iter->second : nullptr);
 }
 
 bool CodeGenTypes::isPointerZeroInitializable(QualType T) {
@@ -924,4 +1089,15 @@ bool CodeGenTypes::isZeroInitializable(QualType T) {
 
 bool CodeGenTypes::isZeroInitializable(const RecordDecl *RD) {
   return getCGRecordLayout(RD).isZeroInitializable();
+}
+
+//
+std::vector<ASTContext::aggregate_scalar_entry>
+CodeGenTypes::get_aggregate_scalar_fields(const CXXRecordDecl* root_decl,
+										  const CXXRecordDecl* decl,
+										  const bool ignore_root_vec_compat,
+										  const bool ignore_bases,
+										  const bool expand_array_image) const {
+	return Context.get_aggregate_scalar_fields(root_decl, decl, &TheCXXABI.getMangleContext(),
+											   ignore_root_vec_compat, ignore_bases, expand_array_image);
 }

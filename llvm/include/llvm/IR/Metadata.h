@@ -49,7 +49,9 @@ class raw_ostream;
 class Type;
 
 enum LLVMConstants : uint32_t {
-  DEBUG_METADATA_VERSION = 3 // Current debug info version number.
+  DEBUG_METADATA_VERSION = 3, // Current debug info version number.
+  DEBUG_METADATA_VERSION_32 = 1,
+  IOS_METAL_DEBUG_METADATA_VERSION = 360203
 };
 
 /// Magic number in the value profile metadata showing a target has been
@@ -390,7 +392,7 @@ public:
   }
 
   static void handleDeletion(Value *V);
-  static void handleRAUW(Value *From, Value *To);
+  static void handleRAUW(Value *From, Value *To, const bool AllowASChange = false);
 
 protected:
   /// Handle collisions after \a Value::replaceAllUsesWith().

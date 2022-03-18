@@ -59,7 +59,7 @@ class GlobalDecl {
   void Init(const Decl *D) {
     assert(!isa<CXXConstructorDecl>(D) && "Use other ctor with ctor decls!");
     assert(!isa<CXXDestructorDecl>(D) && "Use other ctor with dtor decls!");
-    assert(!D->hasAttr<CUDAGlobalAttr>() && "Use other ctor with GPU kernels!");
+    assert(!D->hasAttr<ComputeKernelAttr>() && "Use other ctor with GPU kernels!");
 
     Value.setPointer(D);
   }
@@ -69,7 +69,7 @@ public:
   GlobalDecl(const VarDecl *D) { Init(D);}
   GlobalDecl(const FunctionDecl *D, unsigned MVIndex = 0)
       : MultiVersionIndex(MVIndex) {
-    if (!D->hasAttr<CUDAGlobalAttr>()) {
+    if (!D->hasAttr<ComputeKernelAttr>()) {
       Init(D);
       return;
     }
@@ -77,7 +77,7 @@ public:
   }
   GlobalDecl(const FunctionDecl *D, KernelReferenceKind Kind)
       : Value(D, unsigned(Kind)) {
-    assert(D->hasAttr<CUDAGlobalAttr>() && "Decl is not a GPU kernel!");
+    assert(D->hasAttr<ComputeKernelAttr>() && "Decl is not a GPU kernel!");
   }
   GlobalDecl(const NamedDecl *D) { Init(D); }
   GlobalDecl(const BlockDecl *D) { Init(D); }
@@ -121,7 +121,7 @@ public:
   unsigned getMultiVersionIndex() const {
     assert(isa<FunctionDecl>(
                getDecl()) &&
-               !cast<FunctionDecl>(getDecl())->hasAttr<CUDAGlobalAttr>() &&
+               !cast<FunctionDecl>(getDecl())->hasAttr<ComputeKernelAttr>() &&
            !isa<CXXConstructorDecl>(getDecl()) &&
            !isa<CXXDestructorDecl>(getDecl()) &&
            "Decl is not a plain FunctionDecl!");
@@ -130,7 +130,7 @@ public:
 
   KernelReferenceKind getKernelReferenceKind() const {
     assert(isa<FunctionDecl>(getDecl()) &&
-           cast<FunctionDecl>(getDecl())->hasAttr<CUDAGlobalAttr>() &&
+           cast<FunctionDecl>(getDecl())->hasAttr<ComputeKernelAttr>() &&
            "Decl is not a GPU kernel!");
     return static_cast<KernelReferenceKind>(Value.getInt());
   }
@@ -151,8 +151,12 @@ public:
   }
 
   static KernelReferenceKind getDefaultKernelReference(const FunctionDecl *D) {
+#if 0
     return D->getLangOpts().CUDAIsDevice ? KernelReferenceKind::Kernel
                                          : KernelReferenceKind::Stub;
+#else // we always compile device code
+    return KernelReferenceKind::Kernel;
+#endif
   }
 
   GlobalDecl getWithDecl(const Decl *D) {
@@ -177,7 +181,7 @@ public:
 
   GlobalDecl getWithMultiVersionIndex(unsigned Index) {
     assert(isa<FunctionDecl>(getDecl()) &&
-           !cast<FunctionDecl>(getDecl())->hasAttr<CUDAGlobalAttr>() &&
+           !cast<FunctionDecl>(getDecl())->hasAttr<ComputeKernelAttr>() &&
            !isa<CXXConstructorDecl>(getDecl()) &&
            !isa<CXXDestructorDecl>(getDecl()) &&
            "Decl is not a plain FunctionDecl!");
@@ -188,7 +192,7 @@ public:
 
   GlobalDecl getWithKernelReferenceKind(KernelReferenceKind Kind) {
     assert(isa<FunctionDecl>(getDecl()) &&
-           cast<FunctionDecl>(getDecl())->hasAttr<CUDAGlobalAttr>() &&
+           cast<FunctionDecl>(getDecl())->hasAttr<ComputeKernelAttr>() &&
            "Decl is not a GPU kernel!");
     GlobalDecl Result(*this);
     Result.Value.setInt(unsigned(Kind));

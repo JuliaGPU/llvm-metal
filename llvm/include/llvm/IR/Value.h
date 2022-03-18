@@ -265,7 +265,8 @@ public:
 private:
   void destroyValueName();
   enum class ReplaceMetadataUses { No, Yes };
-  void doRAUW(Value *New, ReplaceMetadataUses);
+  /// If 'AllowASChange' is true, address space changes are valid.
+  void doRAUW(Value *New, ReplaceMetadataUses, const bool AllowASChange = false);
   void setNameImpl(const Twine &Name);
 
 public:
@@ -299,7 +300,8 @@ public:
   /// Go through the uses list for this definition and make each use point to
   /// "V" instead of "this".  After this completes, 'this's use list is
   /// guaranteed to be empty.
-  void replaceAllUsesWith(Value *V);
+  /// If 'AllowASChange' is true, address space changes are valid.
+  void replaceAllUsesWith(Value *V, const bool AllowASChange = false);
 
   /// Change non-metadata uses of this to point to a new Value.
   ///

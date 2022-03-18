@@ -276,7 +276,8 @@ bool isKernelFunction(const Function &F) {
   bool retval = findOneNVVMAnnotation(&F, "kernel", x);
   if (!retval) {
     // There is no NVVM metadata, check the calling convention
-    return F.getCallingConv() == CallingConv::PTX_Kernel;
+    return (F.getCallingConv() == CallingConv::PTX_Kernel ||
+            F.getCallingConv() == CallingConv::FLOOR_KERNEL);
   }
   return (x == 1);
 }

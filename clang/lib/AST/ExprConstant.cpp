@@ -10646,7 +10646,8 @@ public:
       : ExprEvaluatorBaseTy(info), Result(result) {}
 
   bool Success(const llvm::APSInt &SI, const Expr *E, APValue &Result) {
-    assert(E->getType()->isIntegralOrEnumerationType() &&
+    assert((E->getType()->isIntegralOrEnumerationType() ||
+            E->getType()->isSamplerT()) &&
            "Invalid evaluation result.");
     assert(SI.isSigned() == E->getType()->isSignedIntegerOrEnumerationType() &&
            "Invalid evaluation result.");
@@ -10660,7 +10661,8 @@ public:
   }
 
   bool Success(const llvm::APInt &I, const Expr *E, APValue &Result) {
-    assert(E->getType()->isIntegralOrEnumerationType() &&
+    assert((E->getType()->isIntegralOrEnumerationType() ||
+            E->getType()->isSamplerT()) &&
            "Invalid evaluation result.");
     assert(I.getBitWidth() == Info.Ctx.getIntWidth(E->getType()) &&
            "Invalid evaluation result.");
@@ -10674,7 +10676,8 @@ public:
   }
 
   bool Success(uint64_t Value, const Expr *E, APValue &Result) {
-    assert(E->getType()->isIntegralOrEnumerationType() &&
+    assert((E->getType()->isIntegralOrEnumerationType() ||
+            E->getType()->isSamplerT()) &&
            "Invalid evaluation result.");
     Result = APValue(Info.Ctx.MakeIntValue(Value, E->getType()));
     return true;
@@ -11026,6 +11029,7 @@ EvaluateBuiltinClassifyType(QualType T, const LangOptions &LangOpts) {
     case BuiltinType::OCLClkEvent:
     case BuiltinType::OCLQueue:
     case BuiltinType::OCLReserveID:
+    case BuiltinType::OCLPatchControlPoint:
 #define SVE_TYPE(Name, Id, SingletonId) \
     case BuiltinType::Id:
 #include "clang/Basic/AArch64SVEACLETypes.def"
@@ -13180,15 +13184,24 @@ bool IntExprEvaluator::VisitCastExpr(const CastExpr *E) {
   case CK_IntegralComplexToFloatingComplex:
   case CK_BuiltinFnToFnPtr:
   case CK_ZeroToOCLOpaqueType:
+  case CK_ZeroToOCLEvent:
+  case CK_ZeroToOCLQueue:
   case CK_NonAtomicToAtomic:
   case CK_AddressSpaceConversion:
-  case CK_IntToOCLSampler:
   case CK_FloatingToFixedPoint:
   case CK_FixedPointToFloating:
   case CK_FixedPointCast:
   case CK_IntegralToFixedPoint:
   case CK_MatrixCast:
     llvm_unreachable("invalid cast kind for integral value");
+
+  case CK_IntToOCLSampler: {
+    Expr::EvalResult ExprResult;
+    if(!SubExpr->EvaluateAsInt(ExprResult, Info.Ctx)) {
+      return false;
+    }
+    return Success(ExprResult.Val.getInt(), E);
+  }
 
   case CK_BitCast:
   case CK_Dependent:
@@ -13627,10 +13640,12 @@ bool FloatExprEvaluator::VisitCallExpr(const CallExpr *E) {
   case Builtin::BI__builtin_huge_valf:
   case Builtin::BI__builtin_huge_vall:
   case Builtin::BI__builtin_huge_valf128:
+  case Builtin::BI__builtin_huge_valh:
   case Builtin::BI__builtin_inf:
   case Builtin::BI__builtin_inff:
   case Builtin::BI__builtin_infl:
-  case Builtin::BI__builtin_inff128: {
+  case Builtin::BI__builtin_inff128:
+  case Builtin::BI__builtin_infh: {
     const llvm::fltSemantics &Sem =
       Info.Ctx.getFloatTypeSemantics(E->getType());
     Result = llvm::APFloat::getInf(Sem);
@@ -13641,6 +13656,7 @@ bool FloatExprEvaluator::VisitCallExpr(const CallExpr *E) {
   case Builtin::BI__builtin_nansf:
   case Builtin::BI__builtin_nansl:
   case Builtin::BI__builtin_nansf128:
+  case Builtin::BI__builtin_nansh:
     if (!TryEvaluateBuiltinNaN(Info.Ctx, E->getType(), E->getArg(0),
                                true, Result))
       return Error(E);
@@ -13650,6 +13666,7 @@ bool FloatExprEvaluator::VisitCallExpr(const CallExpr *E) {
   case Builtin::BI__builtin_nanf:
   case Builtin::BI__builtin_nanl:
   case Builtin::BI__builtin_nanf128:
+  case Builtin::BI__builtin_nanh:
     // If this is __builtin_nan() turn this into a nan, otherwise we
     // can't constant fold it.
     if (!TryEvaluateBuiltinNaN(Info.Ctx, E->getType(), E->getArg(0),
@@ -13922,6 +13939,8 @@ bool ComplexExprEvaluator::VisitCastExpr(const CastExpr *E) {
   case CK_CopyAndAutoreleaseBlockObject:
   case CK_BuiltinFnToFnPtr:
   case CK_ZeroToOCLOpaqueType:
+  case CK_ZeroToOCLEvent:
+  case CK_ZeroToOCLQueue:
   case CK_NonAtomicToAtomic:
   case CK_AddressSpaceConversion:
   case CK_IntToOCLSampler:
@@ -14564,6 +14583,9 @@ static bool Evaluate(APValue &Result, EvalInfo &Info, const Expr *E) {
       if (!EvaluateAtomic(E, nullptr, Result, Info))
         return false;
     }
+  } else if (T->isSamplerT()) {
+    if (!IntExprEvaluator(Info, Result).Visit(E))
+      return false;
   } else if (Info.getLangOpts().CPlusPlus11) {
     Info.FFDiag(E, diag::note_constexpr_nonliteral) << E->getType();
     return false;

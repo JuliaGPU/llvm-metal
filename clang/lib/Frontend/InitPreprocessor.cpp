@@ -435,7 +435,7 @@ static void InitializeStandardPredefinedMacros(const TargetInfo &TI,
 
   // OpenCL v1.0/1.1 s6.9, v1.2/2.0 s6.10: Preprocessor Directives and Macros.
   if (LangOpts.OpenCL) {
-    if (LangOpts.CPlusPlus) {
+    if (LangOpts.OpenCLCPlusPlus) {
       switch (LangOpts.OpenCLCPlusPlusVersion) {
       case 100:
         Builder.defineMacro("__OPENCL_CPP_VERSION__", "100");
@@ -467,6 +467,8 @@ static void InitializeStandardPredefinedMacros(const TargetInfo &TI,
         Builder.defineMacro("__OPENCL_C_VERSION__", "120");
         break;
       case 200:
+      case 210:
+      case 220:
         Builder.defineMacro("__OPENCL_C_VERSION__", "200");
         break;
       case 300:
@@ -944,8 +946,10 @@ static void InitializePredefinedMacros(const TargetInfo &TI,
   DefineFmt("__UINTPTR", TI.getUIntPtrType(), TI, Builder);
   DefineTypeWidth("__UINTPTR_WIDTH__", TI.getUIntPtrType(), TI, Builder);
 
-  if (TI.hasFloat16Type())
+  if (TI.hasFloat16Type()) {
     DefineFloatMacros(Builder, "FLT16", &TI.getHalfFormat(), "F16");
+    DefineFloatMacros(Builder, "HALF", &TI.getHalfFormat(), "H");
+  }
   DefineFloatMacros(Builder, "FLT", &TI.getFloatFormat(), "F");
   DefineFloatMacros(Builder, "DBL", &TI.getDoubleFormat(), "");
   DefineFloatMacros(Builder, "LDBL", &TI.getLongDoubleFormat(), "L");

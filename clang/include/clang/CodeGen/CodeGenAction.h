@@ -95,6 +95,36 @@ public:
   EmitBCAction(llvm::LLVMContext *_VMContext = nullptr);
 };
 
+class EmitBC32Action : public CodeGenAction {
+  virtual void anchor();
+public:
+  EmitBC32Action(llvm::LLVMContext *_VMContext = nullptr);
+};
+
+class EmitBC50Action : public CodeGenAction {
+  virtual void anchor();
+public:
+  EmitBC50Action(llvm::LLVMContext *_VMContext = nullptr);
+};
+
+class EmitSPIRVAction : public CodeGenAction {
+  virtual void anchor();
+public:
+  EmitSPIRVAction(llvm::LLVMContext *_VMContext = nullptr);
+};
+
+class EmitSPIRVContainerAction : public CodeGenAction {
+  virtual void anchor();
+public:
+  EmitSPIRVContainerAction(llvm::LLVMContext *_VMContext = nullptr);
+};
+
+class EmitMetalLibAction : public CodeGenAction {
+  virtual void anchor();
+public:
+  EmitMetalLibAction(llvm::LLVMContext *_VMContext = nullptr);
+};
+
 class EmitLLVMAction : public CodeGenAction {
   virtual void anchor();
 public:

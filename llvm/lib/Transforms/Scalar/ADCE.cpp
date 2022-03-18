@@ -121,6 +121,8 @@ class AggressiveDeadCodeElimination {
   DominatorTree *DT;
   PostDominatorTree &PDT;
 
+  bool allow_cfg_removal { true };
+
   /// Mapping of blocks to associated information, an element in BlockInfoVec.
   /// Use MapVector to get deterministic iteration order.
   MapVector<BasicBlock *, BlockInfoType> BlockInfo;
@@ -194,8 +196,8 @@ class AggressiveDeadCodeElimination {
 
 public:
   AggressiveDeadCodeElimination(Function &F, DominatorTree *DT,
-                                PostDominatorTree &PDT)
-      : F(F), DT(DT), PDT(PDT) {}
+                                PostDominatorTree &PDT, bool allow_cfg_removal_)
+      : F(F), DT(DT), PDT(PDT), allow_cfg_removal(allow_cfg_removal_) {}
 
   bool performDeadCodeElimination();
 };
@@ -247,7 +249,7 @@ void AggressiveDeadCodeElimination::initialize() {
     if (isAlwaysLive(I))
       markLive(&I);
 
-  if (!RemoveControlFlowFlag)
+  if (!RemoveControlFlowFlag || !allow_cfg_removal)
     return;
 
   if (!RemoveLoops) {
@@ -335,7 +337,7 @@ bool AggressiveDeadCodeElimination::isAlwaysLive(Instruction &I) {
   }
   if (!I.isTerminator())
     return false;
-  if (RemoveControlFlowFlag && (isa<BranchInst>(I) || isa<SwitchInst>(I)))
+  if (RemoveControlFlowFlag && allow_cfg_removal && (isa<BranchInst>(I) || isa<SwitchInst>(I)))
     return false;
   return true;
 }
@@ -688,17 +690,17 @@ void AggressiveDeadCodeElimination::makeUnconditional(BasicBlock *BB,
 // Pass Manager integration code
 //
 //===----------------------------------------------------------------------===//
-PreservedAnalyses ADCEPass::run(Function &F, FunctionAnalysisManager &FAM) {
+PreservedAnalyses ADCEPass::run(Function &F, FunctionAnalysisManager &FAM, bool allow_cfg_removal) {
   // ADCE does not need DominatorTree, but require DominatorTree here
   // to update analysis if it is already available.
   auto *DT = FAM.getCachedResult<DominatorTreeAnalysis>(F);
   auto &PDT = FAM.getResult<PostDominatorTreeAnalysis>(F);
-  if (!AggressiveDeadCodeElimination(F, DT, PDT).performDeadCodeElimination())
+  if (!AggressiveDeadCodeElimination(F, DT, PDT, allow_cfg_removal).performDeadCodeElimination())
     return PreservedAnalyses::all();
 
   PreservedAnalyses PA;
   // TODO: We could track if we have actually done CFG changes.
-  if (!RemoveControlFlowFlag)
+  if (!RemoveControlFlowFlag || !allow_cfg_removal)
     PA.preserveSet<CFGAnalyses>();
   else {
     PA.preserve<DominatorTreeAnalysis>();
@@ -711,8 +713,9 @@ namespace {
 
 struct ADCELegacyPass : public FunctionPass {
   static char ID; // Pass identification, replacement for typeid
+  bool allow_cfg_removal { true };
 
-  ADCELegacyPass() : FunctionPass(ID) {
+  ADCELegacyPass(bool allow_cfg_removal_ = true) : FunctionPass(ID), allow_cfg_removal(allow_cfg_removal_) {
     initializeADCELegacyPassPass(*PassRegistry::getPassRegistry());
   }
 
@@ -725,13 +728,13 @@ struct ADCELegacyPass : public FunctionPass {
     auto *DTWP = getAnalysisIfAvailable<DominatorTreeWrapperPass>();
     auto *DT = DTWP ? &DTWP->getDomTree() : nullptr;
     auto &PDT = getAnalysis<PostDominatorTreeWrapperPass>().getPostDomTree();
-    return AggressiveDeadCodeElimination(F, DT, PDT)
+    return AggressiveDeadCodeElimination(F, DT, PDT, allow_cfg_removal)
         .performDeadCodeElimination();
   }
 
   void getAnalysisUsage(AnalysisUsage &AU) const override {
     AU.addRequired<PostDominatorTreeWrapperPass>();
-    if (!RemoveControlFlowFlag)
+    if (!RemoveControlFlowFlag || !allow_cfg_removal)
       AU.setPreservesCFG();
     else {
       AU.addPreserved<DominatorTreeWrapperPass>();
@@ -751,4 +754,4 @@ INITIALIZE_PASS_DEPENDENCY(PostDominatorTreeWrapperPass)
 INITIALIZE_PASS_END(ADCELegacyPass, "adce", "Aggressive Dead Code Elimination",
                     false, false)
 
-FunctionPass *llvm::createAggressiveDCEPass() { return new ADCELegacyPass(); }
+FunctionPass *llvm::createAggressiveDCEPass(bool allow_cfg_removal) { return new ADCELegacyPass(allow_cfg_removal); }

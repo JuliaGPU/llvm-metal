@@ -567,7 +567,17 @@ void CGDebugInfo::CreateCompileUnit() {
     LangTag = llvm::dwarf::DW_LANG_C89;
   }
 
-  std::string Producer = getClangFullVersion();
+  std::string Producer;
+  if (!CGM.getLangOpts().Metal) {
+    Producer = getClangFullVersion();
+  } else {
+    // override producer when targeting Metal
+    if (CGM.getLangOpts().MetalVersion < 240) {
+      Producer = "Apple LLVM version 31001.143 (metalfe-31001.143)";
+    } else {
+      Producer = "Apple metal version 31001.363 (metalfe-31001.363)";
+    }
+  }
 
   // Figure out which version of the ObjC runtime we have.
   unsigned RuntimeVers = 0;
@@ -600,11 +610,27 @@ void CGDebugInfo::CreateCompileUnit() {
   // file. Its directory part specifies what becomes the
   // DW_AT_comp_dir (the compilation directory), even if the source
   // file was specified with an absolute path.
+  // NOTE: however, for Metal we always need to specify the absolute path
   if (CSKind)
     CSInfo.emplace(*CSKind, Checksum);
+  std::string cu_file_name;
+  if (!CGM.getLangOpts().Metal) {
+    cu_file_name = remapDIPath(MainFileName);
+  } else {
+    cu_file_name = MainFileName;
+    SmallVector<char> src_file_name(cu_file_name.size());
+    src_file_name.assign(cu_file_name.begin(), cu_file_name.end());
+    llvm::sys::fs::make_absolute(src_file_name);
+    cu_file_name.resize(src_file_name.size(), '\0');
+    cu_file_name.assign(src_file_name.begin(), src_file_name.end());
+  }
   llvm::DIFile *CUFile = DBuilder.createFile(
-      remapDIPath(MainFileName), remapDIPath(getCurrentDirname()), CSInfo,
+      cu_file_name, remapDIPath(getCurrentDirname()), CSInfo,
       getSource(SM, SM.getMainFileID()));
+  if (CGM.getLangOpts().Metal) {
+    // cache DIFile, so we don't emit it twice
+    DIFileCache[CUFile->getFilename().data()].reset(CUFile);
+  }
 
   StringRef Sysroot, SDK;
   if (CGM.getCodeGenOpts().getDebuggerTuning() == llvm::DebuggerKind::LLDB) {
@@ -686,7 +712,7 @@ llvm::DIType *CGDebugInfo::CreateType(const BuiltinType *BT) {
 
 #define IMAGE_TYPE(ImgType, Id, SingletonId, Access, Suffix)                   \
   case BuiltinType::Id:                                                        \
-    return getOrCreateStructPtrType("opencl_" #ImgType "_" #Suffix "_t",       \
+    return getOrCreateStructPtrType("opencl_" #ImgType #Suffix "_t",           \
                                     SingletonId);
 #include "clang/Basic/OpenCLImageTypes.def"
   case BuiltinType::OCLSampler:
@@ -699,6 +725,8 @@ llvm::DIType *CGDebugInfo::CreateType(const BuiltinType *BT) {
     return getOrCreateStructPtrType("opencl_queue_t", OCLQueueDITy);
   case BuiltinType::OCLReserveID:
     return getOrCreateStructPtrType("opencl_reserve_id_t", OCLReserveIDDITy);
+  case BuiltinType::OCLPatchControlPoint:
+    return getOrCreateStructPtrType("__patch_control_point_t", OCLPatchControlPointTyDITy);
 #define EXT_OPAQUE_TYPE(ExtType, Id, Ext) \
   case BuiltinType::Id: \
     return getOrCreateStructPtrType("opencl_" #ExtType, Id##Ty);
@@ -1310,9 +1338,13 @@ static unsigned getDwarfCC(CallingConv CC) {
     return llvm::dwarf::DW_CC_LLVM_AAPCS_VFP;
   case CC_IntelOclBicc:
     return llvm::dwarf::DW_CC_LLVM_IntelOclBicc;
-  case CC_SpirFunction:
+  case CC_FloorFunction:
     return llvm::dwarf::DW_CC_LLVM_SpirFunction;
-  case CC_OpenCLKernel:
+  case CC_FloorKernel:
+  case CC_FloorVertex:
+  case CC_FloorFragment:
+  case CC_FloorTessControl:
+  case CC_FloorTessEval:
     return llvm::dwarf::DW_CC_LLVM_OpenCLKernel;
   case CC_Swift:
     return llvm::dwarf::DW_CC_LLVM_Swift;
@@ -3120,6 +3152,8 @@ llvm::DIType *CGDebugInfo::CreateType(const AtomicType *Ty, llvm::DIFile *U) {
 }
 
 llvm::DIType *CGDebugInfo::CreateType(const PipeType *Ty, llvm::DIFile *U) {
+  // Ignore the atomic wrapping
+  // FIXME: What is the correct representation?
   return getOrCreateType(Ty->getElementType(), U);
 }
 

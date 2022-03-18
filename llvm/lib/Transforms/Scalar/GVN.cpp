@@ -1917,6 +1917,22 @@ bool GVN::processLoad(LoadInst *L) {
   // ... to a pointer that has been loaded from before...
   MemDepResult Dep = MD->getDependency(L);
 
+  // prevent unwanted int <-> vector bitcasts on Metal/Vulkan
+  const Triple triple(L->getModule()->getTargetTriple());
+  if (triple.getArch() == Triple::ArchType::spir64 ||
+      triple.getArch() == Triple::ArchType::air64) {
+    if (const auto dep_instr = Dep.getInst(); dep_instr) {
+      if (dep_instr->getType()->isVectorTy() != L->getType()->isVectorTy()) {
+        return false;
+      }
+      if (const auto dep_store_instr = dyn_cast_or_null<StoreInst>(dep_instr); dep_store_instr) {
+        if (dep_store_instr->getValueOperand()->getType()->isVectorTy() != L->getType()->isVectorTy()) {
+          return false;
+        }
+      }
+    }
+  }
+
   // If it is defined in another block, try harder.
   if (Dep.isNonLocal())
     return processNonLocalLoad(L);

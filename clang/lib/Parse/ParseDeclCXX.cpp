@@ -3255,7 +3255,7 @@ Parser::DeclGroupPtrTy Parser::ParseCXXClassMemberDeclarationWithPragmas(
   case tok::kw_private:
     // FIXME: We don't accept GNU attributes on access specifiers in OpenCL mode
     // yet.
-    if (getLangOpts().OpenCL && !NextToken().is(tok::colon))
+    if (getLangOpts().OpenCL && !getLangOpts().CPlusPlus && !NextToken().is(tok::colon))
       return ParseCXXClassMemberDeclaration(AS, AccessAttrs);
     LLVM_FALLTHROUGH;
   case tok::kw_public:

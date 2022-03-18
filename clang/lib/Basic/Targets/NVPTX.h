@@ -32,6 +32,7 @@ static const unsigned NVPTXAddrSpaceMap[] = {
     0, // opencl_generic
     1, // opencl_global_device
     1, // opencl_global_host
+    0, // vulkan_input
     1, // cuda_device
     4, // cuda_constant
     3, // cuda_shared
@@ -100,6 +101,7 @@ public:
     case 'l':
     case 'f':
     case 'd':
+    case 'b':
       Info.setAllowsRegister();
       return true;
     }
@@ -166,6 +168,13 @@ public:
   }
 
   CallingConvCheckResult checkCallingConvention(CallingConv CC) const override {
+    if (CC == CC_FloorFunction ||
+        CC == CC_FloorVertex ||
+        CC == CC_FloorFragment ||
+        CC == CC_FloorKernel) {
+        return CCCR_OK;
+    }
+
     // CUDA compilations support all of the host's calling conventions.
     //
     // TODO: We should warn if you apply a non-default CC to anything other than
@@ -173,6 +182,10 @@ public:
     if (HostTarget)
       return HostTarget->checkCallingConvention(CC);
     return CCCR_Warning;
+  }
+
+  CallingConv getDefaultCallingConv() const override {
+    return CC_FloorFunction;
   }
 
   bool hasExtIntType() const override { return true; }

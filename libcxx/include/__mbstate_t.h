@@ -25,6 +25,9 @@
 // This is a gruesome hack, but I don't know how to make it cleaner for
 // the time being.
 
+#if 1
+typedef size_t mbstate_t;
+#else
 #ifndef _LIBCPP_HAS_NO_WIDE_CHARACTERS
 #   include <wchar.h> // for mbstate_t
 #elif __has_include(<bits/types/mbstate_t.h>)
@@ -33,6 +36,7 @@
 #   include <sys/_types/_mbstate_t.h> // works on Darwin
 #else
 #   error "The library was configured without support for wide-characters, but we don't know how to get the definition of mbstate_t without <wchar.h> on your platform."
+#endif
 #endif
 
 _LIBCPP_BEGIN_NAMESPACE_STD

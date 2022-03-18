@@ -73,6 +73,11 @@ using namespace llvm;
 
 #define DEBUG_TYPE "loop-unroll"
 
+/// A magic value for use with the Threshold parameter to indicate
+/// that the loop unroll should be performed regardless of how much
+/// code expansion would result.
+static const unsigned NoThreshold = std::numeric_limits<unsigned>::max();
+
 cl::opt<bool> llvm::ForgetSCEVInLoopUnroll(
     "forget-scev-loop-unroll", cl::init(false), cl::Hidden,
     cl::desc("Forget everything in SCEV when doing LoopUnroll, instead of just"
@@ -141,8 +146,9 @@ static cl::opt<unsigned> UnrollMaxUpperBound(
     cl::desc(
         "The max of trip count upper bound that is considered in unrolling"));
 
+// NOTE: explicit requests for unrolls should *always* be considered
 static cl::opt<unsigned> PragmaUnrollThreshold(
-    "pragma-unroll-threshold", cl::init(16 * 1024), cl::Hidden,
+    "pragma-unroll-threshold", cl::init(NoThreshold), cl::Hidden,
     cl::desc("Unrolled size limit for loops with an unroll(full) or "
              "unroll_count pragma."));
 
@@ -174,11 +180,6 @@ static cl::opt<unsigned>
                            cl::Hidden,
                            cl::desc("Default threshold (max size of unrolled "
                                     "loop), used in all but O3 optimizations"));
-
-/// A magic value for use with the Threshold parameter to indicate
-/// that the loop unroll should be performed regardless of how much
-/// code expansion would result.
-static const unsigned NoThreshold = std::numeric_limits<unsigned>::max();
 
 /// Gather the various unrolling parameters based on the defaults, compiler
 /// flags, TTI overrides and user specified parameters.
@@ -670,7 +671,7 @@ unsigned llvm::ApproximateLoopSize(
     const SmallPtrSetImpl<const Value *> &EphValues, unsigned BEInsns) {
   CodeMetrics Metrics;
   for (BasicBlock *BB : L->blocks())
-    Metrics.analyzeBasicBlock(BB, TTI, EphValues);
+    Metrics.analyzeBasicBlock(BB, TTI, EphValues, false, true /* allow duplicates */);
   NumCalls = Metrics.NumInlineCandidates;
   NotDuplicatable = Metrics.notDuplicatable;
   Convergent = Metrics.convergent;

@@ -148,7 +148,7 @@ public:
     _LIBCPP_INLINE_VISIBILITY _LIBCPP_CONSTEXPR_AFTER_CXX17
     static pointer pointer_to(typename conditional<is_void<element_type>::value,
                                       __nat, element_type>::type& __r) _NOEXCEPT
-        {return _VSTD::addressof(__r);}
+        {return __builtin_addressof(__r);}
 };
 
 template <class _From, class _To>

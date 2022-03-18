@@ -2553,6 +2553,7 @@ class OffloadingActionBuilder final {
         // If the host input is not CUDA or HIP, we don't need to bother about
         // this input.
         if (!(IA->getType() == types::TY_CUDA ||
+              IA->getType() == types::TY_CUDAHeader ||
               IA->getType() == types::TY_HIP ||
               IA->getType() == types::TY_PP_HIP)) {
           // The builder will ignore this input.
@@ -2567,8 +2568,11 @@ class OffloadingActionBuilder final {
           return ABRT_Success;
 
         // Replicate inputs for each GPU architecture.
-        auto Ty = IA->getType() == types::TY_HIP ? types::TY_HIP_DEVICE
-                                                 : types::TY_CUDA_DEVICE;
+        auto Ty = types::TY_CUDA_DEVICE;
+        if (IA->getType() == types::TY_HIP)
+          Ty = types::TY_HIP_DEVICE;
+        else if (IA->getType() == types::TY_CUDAHeader)
+          Ty = types::TY_CUDAHeader;
         std::string CUID = FixedCUID.str();
         if (CUID.empty()) {
           if (UseCUID == CUID_Random)
@@ -3259,7 +3263,7 @@ class OffloadingActionBuilder final {
             C.MakeAction<LinkJobAction>(LI, types::TY_Image);
         OffloadAction::DeviceDependences DeviceLinkDeps;
         DeviceLinkDeps.add(*DeviceLinkAction, **TC, /*BoundArch=*/nullptr,
-		        Action::OFK_OpenMP);
+                Action::OFK_OpenMP);
         AL.push_back(C.MakeAction<OffloadAction>(DeviceLinkDeps,
             DeviceLinkAction->getType()));
         ++TC;
@@ -4000,6 +4004,16 @@ Action *Driver::ConstructPhaseAction(
       return C.MakeAction<CompileJobAction>(Input, types::TY_ModuleFile);
     if (Args.hasArg(options::OPT_verify_pch))
       return C.MakeAction<VerifyPCHJobAction>(Input, types::TY_Nothing);
+    if (Args.hasArg(options::OPT_emit_llvm_bc_32))
+      return C.MakeAction<CompileJobAction>(Input, types::TY_LLVM_BC_32);
+    if (Args.hasArg(options::OPT_emit_llvm_bc_50))
+      return C.MakeAction<CompileJobAction>(Input, types::TY_LLVM_BC_50);
+    if (Args.hasArg(options::OPT_emit_spirv))
+      return C.MakeAction<CompileJobAction>(Input, types::TY_SPIRV);
+    if (Args.hasArg(options::OPT_emit_spirv_container))
+      return C.MakeAction<CompileJobAction>(Input, types::TY_SPIRVC);
+    if (Args.hasArg(options::OPT_emit_metallib))
+      return C.MakeAction<CompileJobAction>(Input, types::TY_METALLIB);
     return C.MakeAction<CompileJobAction>(Input, types::TY_LLVM_BC);
   }
   case phases::Backend: {
@@ -4012,8 +4026,16 @@ Action *Driver::ConstructPhaseAction(
         (TargetDeviceOffloadKind == Action::OFK_HIP &&
          Args.hasFlag(options::OPT_fgpu_rdc, options::OPT_fno_gpu_rdc,
                       false))) {
-      types::ID Output =
-          Args.hasArg(options::OPT_S) ? types::TY_LLVM_IR : types::TY_LLVM_BC;
+      types::ID Output = types::TY_LLVM_BC;
+      if (Args.hasArg(options::OPT_S)) {
+        Output = types::TY_LLVM_IR;
+      } else {
+        if (Args.hasArg(options::OPT_emit_llvm_bc_32)) Output = types::TY_LLVM_BC_32;
+        if (Args.hasArg(options::OPT_emit_llvm_bc_50)) Output = types::TY_LLVM_BC_50;
+        if (Args.hasArg(options::OPT_emit_spirv)) Output = types::TY_SPIRV;
+        if (Args.hasArg(options::OPT_emit_spirv_container)) Output = types::TY_SPIRVC;
+        if (Args.hasArg(options::OPT_emit_metallib)) Output = types::TY_METALLIB;
+      }
       return C.MakeAction<BackendJobAction>(Input, Output);
     }
     return C.MakeAction<BackendJobAction>(Input, types::TY_PP_Asm);
@@ -5073,10 +5095,17 @@ const char *Driver::GetNamedOutputPath(Compilation &C, const JobAction &JA,
              Args.hasFlag(options::OPT_fgpu_rdc, options::OPT_fno_gpu_rdc,
                           false);
     };
-    if (!AtTopLevel && JA.getType() == types::TY_LLVM_BC &&
+    if (!AtTopLevel &&
+        (JA.getType() == types::TY_LLVM_BC ||
+         JA.getType() == types::TY_LLVM_BC_32 ||
+         JA.getType() == types::TY_LLVM_BC_50 ||
+         JA.getType() == types::TY_SPIRV ||
+         JA.getType() == types::TY_SPIRVC ||
+         JA.getType() == types::TY_METALLIB) &&
         (C.getArgs().hasArg(options::OPT_emit_llvm) ||
-         IsHIPRDCInCompilePhase(JA, C.getArgs())))
+         IsHIPRDCInCompilePhase(JA, C.getArgs()))) {
       Suffixed += ".tmp";
+    }
     Suffixed += '.';
     Suffixed += Suffix;
     NamedOutput = C.getArgs().MakeArgString(Suffixed.c_str());

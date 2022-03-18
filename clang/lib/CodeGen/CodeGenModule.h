@@ -87,6 +87,7 @@ namespace CodeGen {
 class CallArgList;
 class CodeGenFunction;
 class CodeGenTBAA;
+class CGBuilderTy;
 class CGCXXABI;
 class CGDebugInfo;
 class CGObjCRuntime;
@@ -1272,6 +1273,12 @@ public:
   /// Emit all the global annotations.
   void EmitGlobalAnnotations();
 
+  /// Emit OpenCL related annotations.
+  void EmitOCLAnnotations();
+
+  /// Emit OCL compiler options
+  void EmitOCLBuildOptions();
+
   /// Emit an annotation string.
   llvm::Constant *EmitAnnotationString(StringRef Str);
 
@@ -1431,8 +1438,11 @@ public:
 
   llvm::SanitizerStatReport &getSanStats();
 
-  llvm::Value *
-  createOpenCLIntToSamplerConversion(const Expr *E, CodeGenFunction &CGF);
+  llvm::Constant*
+  createIntToSamplerConversion(const Expr *E,
+                               CodeGenFunction *CGF,
+                               llvm::GlobalVariable *InsertBefore = nullptr,
+                               StringRef Name = "");
 
   /// OpenCL v1.2 s5.6.4.6 allows the compiler to store kernel argument
   /// information in the program executable. The argument information stored
@@ -1445,8 +1455,17 @@ public:
   /// \param FD is a pointer to function declaration if any.
   /// \param CGF is a pointer to CodeGenFunction that generates this function.
   void GenOpenCLArgMetadata(llvm::Function *FN,
-                            const FunctionDecl *FD = nullptr,
-                            CodeGenFunction *CGF = nullptr);
+                            const FunctionDecl *FD,
+                            CodeGenFunction *CGF,
+                            SmallVector<llvm::Metadata *, 5> &kernelMDArgs);
+
+  void GenAIRMetadata(const FunctionDecl *FD, llvm::Function *Fn,
+                      const CGFunctionInfo &FnInfo,
+                      SmallVector <llvm::Metadata*, 5> &kernelMDArgs,
+                      CGBuilderTy& Builder);
+
+  void GenVulkanMetadata(const FunctionDecl *FD, llvm::Function *Fn,
+                         CGBuilderTy& Builder);
 
   /// Get target specific null pointer.
   /// \param T is the LLVM type of the null pointer.
@@ -1465,6 +1484,15 @@ public:
   /// Print the postfix for externalized static variable for single source
   /// offloading languages CUDA and HIP.
   void printPostfixForExternalizedStaticVar(llvm::raw_ostream &OS) const;
+
+  /// Creates and returns a graphics backend (Metal/Vulkan) compatible struct
+  /// type from the specified clang "type" and pre-existing LLVM "llvm_type".
+  /// If "create_packed" is true, this will create a packed struct type.
+  /// If "create_unnamed" is true, this will create an unname struct type.
+  llvm::Type* GraphicsExpandIOType(const QualType& type, llvm::Type* llvm_type,
+                                   CodeGenTypes& CGT,
+                                   const bool create_packed = true,
+                                   const bool create_unnamed = false);
 
 private:
   llvm::Constant *GetOrCreateLLVMFunction(
@@ -1627,6 +1655,10 @@ private:
 
   llvm::Metadata *CreateMetadataIdentifierImpl(QualType T, MetadataTypeMap &Map,
                                                StringRef Suffix);
+
+  // Get a metadata vector containing the build options
+  llvm::SmallVector<llvm::Metadata *, 5> getBuildOptions();
+
 };
 
 }  // end namespace CodeGen

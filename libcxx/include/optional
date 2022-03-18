@@ -319,9 +319,9 @@ struct __optional_storage_base : __optional_destruct_base<_Tp>
     {
         _LIBCPP_ASSERT(!has_value(), "__construct called for engaged __optional_storage");
 #if _LIBCPP_STD_VER > 17
-        _VSTD::construct_at(_VSTD::addressof(this->__val_), _VSTD::forward<_Args>(__args)...);
+        _VSTD::construct_at(__builtin_addressof(this->__val_), _VSTD::forward<_Args>(__args)...);
 #else
-        ::new ((void*)_VSTD::addressof(this->__val_)) value_type(_VSTD::forward<_Args>(__args)...);
+        ::new ((void*)__builtin_addressof(this->__val_)) value_type(_VSTD::forward<_Args>(__args)...);
 #endif
         this->__engaged_ = true;
     }
@@ -386,7 +386,7 @@ struct __optional_storage_base<_Tp, true>
     template <class _UArg>
     _LIBCPP_INLINE_VISIBILITY
     constexpr explicit __optional_storage_base(in_place_t, _UArg&& __uarg)
-        :  __value_(_VSTD::addressof(__uarg))
+        :  __value_(__builtin_addressof(__uarg))
     {
       static_assert(__can_bind_reference<_UArg>(),
         "Attempted to construct a reference element in tuple from a "
@@ -416,7 +416,7 @@ struct __optional_storage_base<_Tp, true>
         static_assert(__can_bind_reference<_UArg>(),
             "Attempted to construct a reference element in tuple from a "
             "possible temporary");
-        __value_ = _VSTD::addressof(__val);
+        __value_ = __builtin_addressof(__val);
     }
 
     template <class _That>
@@ -879,7 +879,7 @@ public:
     operator->() const
     {
         _LIBCPP_ASSERT(this->has_value(), "optional operator-> called on a disengaged value");
-        return _VSTD::addressof(this->__get());
+        return __builtin_addressof(this->__get());
     }
 
     _LIBCPP_INLINE_VISIBILITY
@@ -888,7 +888,7 @@ public:
     operator->()
     {
         _LIBCPP_ASSERT(this->has_value(), "optional operator-> called on a disengaged value");
-        return _VSTD::addressof(this->__get());
+        return __builtin_addressof(this->__get());
     }
 
     _LIBCPP_INLINE_VISIBILITY

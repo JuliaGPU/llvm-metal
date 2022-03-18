@@ -63,12 +63,12 @@ class LLVM_LIBRARY_VISIBILITY InstCombinerImpl final
       public InstVisitor<InstCombinerImpl, Instruction *> {
 public:
   InstCombinerImpl(InstructionWorklist &Worklist, BuilderTy &Builder,
-                   bool MinimizeSize, AAResults *AA, AssumptionCache &AC,
+                   bool MinimizeSize, bool isVulkan, AAResults *AA, AssumptionCache &AC,
                    TargetLibraryInfo &TLI, TargetTransformInfo &TTI,
                    DominatorTree &DT, OptimizationRemarkEmitter &ORE,
                    BlockFrequencyInfo *BFI, ProfileSummaryInfo *PSI,
                    const DataLayout &DL, LoopInfo *LI)
-      : InstCombiner(Worklist, Builder, MinimizeSize, AA, AC, TLI, TTI, DT, ORE,
+      : InstCombiner(Worklist, Builder, MinimizeSize, isVulkan, AA, AC, TLI, TTI, DT, ORE,
                      BFI, PSI, DL, LI) {}
 
   virtual ~InstCombinerImpl() {}

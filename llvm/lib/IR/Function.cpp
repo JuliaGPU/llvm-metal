@@ -389,8 +389,13 @@ Function::Function(FunctionType *Ty, LinkageTypes Linkage, unsigned AddrSpace,
   setGlobalObjectSubClassData(0);
 
   // We only need a symbol table for a function if the context keeps value names
-  if (!getContext().shouldDiscardValueNames())
+  if (!getContext().shouldDiscardValueNames()) {
+#if 0
     SymTab = std::make_unique<ValueSymbolTable>(NonGlobalValueMaxNameSize);
+#else // always allow unlimited names
+    SymTab = std::make_unique<ValueSymbolTable>(-1);
+#endif
+  }
 
   // If the function has arguments, mark them as lazily built.
   if (Ty->getNumParams())

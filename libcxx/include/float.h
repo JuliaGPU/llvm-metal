@@ -70,6 +70,8 @@ Macros:
 
 */
 
+#if 0 // we don't want this
+
 #include <__config>
 
 #if !defined(_LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER)
@@ -89,5 +91,7 @@ Macros:
 #endif
 
 #endif // __cplusplus
+
+#endif
 
 #endif // _LIBCPP_FLOAT_H

@@ -30,6 +30,11 @@ namespace clang {
   enum BackendAction {
     Backend_EmitAssembly,  ///< Emit native assembly files
     Backend_EmitBC,        ///< Emit LLVM bitcode files
+    Backend_EmitBC32,      ///< Emit LLVM 3.2 bitcode files
+    Backend_EmitBC50,      ///< Emit LLVM 5.0 bitcode files
+    Backend_EmitSPIRV,     ///< Emit SPIR-V bitcode files
+    Backend_EmitSPIRVContainer,    ///< Emit container with SPIR-V bitcode files
+    Backend_EmitMetalLib,          ///< Emit Metal Library
     Backend_EmitLL,        ///< Emit human-readable LLVM assembly
     Backend_EmitNothing,   ///< Don't emit anything (benchmarking mode)
     Backend_EmitMCNull,    ///< Run CodeGen, but don't emit anything

@@ -26,7 +26,7 @@ void SingleWorkItemBarrierCheck::registerMatchers(MatchFinder *Finder) {
       functionDecl(
           allOf(
               // That are OpenCL kernels...
-              hasAttr(attr::Kind::OpenCLKernel),
+              hasAttr(attr::Kind::ComputeKernel),
               // And call a barrier function (either 1.x or 2.x version)...
               forEachDescendant(callExpr(callee(functionDecl(hasAnyName(
                                              "barrier", "work_group_barrier"))))

@@ -498,18 +498,26 @@ static bool contains(Value *Expr, Value *V) {
 }
 #endif // NDEBUG
 
-void Value::doRAUW(Value *New, ReplaceMetadataUses ReplaceMetaUses) {
+void Value::doRAUW(Value *New, ReplaceMetadataUses ReplaceMetaUses, const bool AllowASChange) {
   assert(New && "Value::replaceAllUsesWith(<null>) is invalid!");
   assert(!contains(New, this) &&
          "this->replaceAllUsesWith(expr(this)) is NOT valid!");
-  assert(New->getType() == getType() &&
-         "replaceAllUses of value with new value of different type!");
+  if (AllowASChange &&
+      New->getType()->isPointerTy() &&
+      getType()->isPointerTy()) {
+    assert(New->getType()->getPointerElementType() ==
+           getType()->getPointerElementType() &&
+           "replaceAllUses of value with new value of different type!");
+  } else {
+    assert(New->getType() == getType() &&
+           "replaceAllUses of value with new value of different type!");
+  }
 
   // Notify all ValueHandles (if present) that this value is going away.
   if (HasValueHandle)
-    ValueHandleBase::ValueIsRAUWd(this, New);
+    ValueHandleBase::ValueIsRAUWd(this, New, AllowASChange);
   if (ReplaceMetaUses == ReplaceMetadataUses::Yes && isUsedByMetadata())
-    ValueAsMetadata::handleRAUW(this, New);
+    ValueAsMetadata::handleRAUW(this, New, AllowASChange);
 
   while (!materialized_use_empty()) {
     Use &U = *UseList;
@@ -529,8 +537,8 @@ void Value::doRAUW(Value *New, ReplaceMetadataUses ReplaceMetaUses) {
     BB->replaceSuccessorsPhiUsesWith(cast<BasicBlock>(New));
 }
 
-void Value::replaceAllUsesWith(Value *New) {
-  doRAUW(New, ReplaceMetadataUses::Yes);
+void Value::replaceAllUsesWith(Value *New, const bool AllowASChange) {
+  doRAUW(New, ReplaceMetadataUses::Yes, AllowASChange);
 }
 
 void Value::replaceNonMetadataUsesWith(Value *New) {
@@ -1190,11 +1198,19 @@ void ValueHandleBase::ValueIsDeleted(Value *V) {
   }
 }
 
-void ValueHandleBase::ValueIsRAUWd(Value *Old, Value *New) {
+void ValueHandleBase::ValueIsRAUWd(Value *Old, Value *New, const bool AllowASChange) {
   assert(Old->HasValueHandle &&"Should only be called if ValueHandles present");
   assert(Old != New && "Changing value into itself!");
-  assert(Old->getType() == New->getType() &&
-         "replaceAllUses of value with new value of different type!");
+  if (AllowASChange &&
+      Old->getType()->isPointerTy() &&
+      New->getType()->isPointerTy()) {
+    assert(Old->getType()->getPointerElementType() ==
+           New->getType()->getPointerElementType() &&
+           "replaceAllUses of value with new value of different type!");
+  } else {
+    assert(Old->getType() == New->getType() &&
+           "replaceAllUses of value with new value of different type!");
+  }
 
   // Get the linked list base, which is guaranteed to exist since the
   // HasValueHandle flag is set.

@@ -17,7 +17,9 @@
 #include <__utility/pair.h>
 #include <__utility/swap.h>
 #include <cstdint>
+#if 0
 #include <cstring>
+#endif
 #include <cstddef>
 #include <limits>
 #include <type_traits>
@@ -34,7 +36,7 @@ _Size
 __loadword(const void* __p)
 {
     _Size __r;
-    _VSTD::memcpy(&__r, __p, sizeof(__r));
+    __builtin_memcpy(&__r, __p, sizeof(__r));
     return __r;
 }
 

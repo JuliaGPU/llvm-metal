@@ -80,7 +80,9 @@ template <class E> void rethrow_if_nested(const E& e);
 #include <__config>
 #include <__memory/addressof.h>
 #include <cstddef>
+#if 0
 #include <cstdlib>
+#endif
 #include <type_traits>
 #include <version>
 
@@ -103,7 +105,7 @@ public:
     _LIBCPP_INLINE_VISIBILITY exception(const exception&) _NOEXCEPT = default;
 
     virtual ~exception() _NOEXCEPT;
-    virtual const char* what() const _NOEXCEPT;
+    virtual constant const char* what() const _NOEXCEPT;
 };
 
 class _LIBCPP_EXCEPTION_ABI bad_exception
@@ -112,7 +114,7 @@ class _LIBCPP_EXCEPTION_ABI bad_exception
 public:
     _LIBCPP_INLINE_VISIBILITY bad_exception() _NOEXCEPT {}
     virtual ~bad_exception() _NOEXCEPT;
-    virtual const char* what() const _NOEXCEPT;
+    virtual constant const char* what() const _NOEXCEPT;
 };
 #endif // !_LIBCPP_ABI_VCRUNTIME
 
@@ -181,7 +183,9 @@ make_exception_ptr(_Ep __e) _NOEXCEPT
     }
 #else
     ((void)__e);
+#if 0 // NOTE/TODO: there is no compute abort - trap instead?
     _VSTD::abort();
+#endif
 #endif
 }
 
@@ -229,7 +233,7 @@ template<class _Ep>
 _LIBCPP_INLINE_VISIBILITY exception_ptr
 make_exception_ptr(_Ep __e) _NOEXCEPT
 {
-  return __copy_exception_ptr(_VSTD::addressof(__e), __GetExceptionInfo(__e));
+  return __copy_exception_ptr(__builtin_addressof(__e), __GetExceptionInfo(__e));
 }
 
 #endif // _LIBCPP_ABI_MICROSOFT
@@ -315,7 +319,7 @@ void
 rethrow_if_nested(const _Ep& __e,
                   typename enable_if< __can_dynamic_cast<_Ep, nested_exception>::value>::type* = 0)
 {
-    const nested_exception* __nep = dynamic_cast<const nested_exception*>(_VSTD::addressof(__e));
+    const nested_exception* __nep = dynamic_cast<const nested_exception*>(__builtin_addressof(__e));
     if (__nep)
         __nep->rethrow_nested();
 }

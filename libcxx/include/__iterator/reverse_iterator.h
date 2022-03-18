@@ -124,7 +124,7 @@ public:
     _LIBCPP_INLINE_VISIBILITY _LIBCPP_CONSTEXPR_AFTER_CXX14
     reference operator*() const {_Iter __tmp = current; return *--__tmp;}
     _LIBCPP_INLINE_VISIBILITY _LIBCPP_CONSTEXPR_AFTER_CXX14
-    pointer  operator->() const {return _VSTD::addressof(operator*());}
+    pointer  operator->() const {return __builtin_addressof(operator*());}
     _LIBCPP_INLINE_VISIBILITY _LIBCPP_CONSTEXPR_AFTER_CXX14
     reverse_iterator& operator++() {--current; return *this;}
     _LIBCPP_INLINE_VISIBILITY _LIBCPP_CONSTEXPR_AFTER_CXX14

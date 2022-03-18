@@ -502,10 +502,12 @@ void CallInst::init(FunctionType *FTy, Value *Func, ArrayRef<Value *> Args,
           (FTy->isVarArg() && Args.size() > FTy->getNumParams())) &&
          "Calling a function with bad signature!");
 
+#if 0 // TODO: disabled for now, need to ignore address space mismatches
   for (unsigned i = 0; i != Args.size(); ++i)
     assert((i >= FTy->getNumParams() ||
             FTy->getParamType(i) == Args[i]->getType()) &&
            "Calling a function with a bad signature!");
+#endif
 #endif
 
   // Set operands in order of their index to match use-list-order

@@ -6316,7 +6316,7 @@ public:
     _LIBCPP_INLINE_VISIBILITY
     reference operator*() const {return  __match_;}
     _LIBCPP_INLINE_VISIBILITY
-    pointer operator->() const  {return _VSTD::addressof(__match_);}
+    pointer operator->() const  {return __builtin_addressof(__match_);}
 
     regex_iterator& operator++();
     _LIBCPP_INLINE_VISIBILITY
@@ -6340,7 +6340,7 @@ regex_iterator<_BidirectionalIterator, _CharT, _Traits>::
                    const regex_type& __re, regex_constants::match_flag_type __m)
     : __begin_(__a),
       __end_(__b),
-      __pregex_(_VSTD::addressof(__re)),
+      __pregex_(__builtin_addressof(__re)),
       __flags_(__m)
 {
     _VSTD::regex_search(__begin_, __end_, __match_, *__pregex_, __flags_);

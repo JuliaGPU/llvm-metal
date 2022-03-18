@@ -11,6 +11,7 @@ set(LLVM_LINK_COMPONENTS
     Core
     FuzzMutate
     IRReader
+    LibFloor
     MC
     ScalarOpts
     SelectionDAG

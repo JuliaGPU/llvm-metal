@@ -49,7 +49,9 @@ void __throw_bad_function_call()
 #ifndef _LIBCPP_NO_EXCEPTIONS
     throw bad_function_call();
 #else
+#if 0 // we don't have this
     _VSTD::abort();
+#endif
 #endif
 }
 
@@ -258,10 +260,14 @@ public:
     virtual void destroy() _NOEXCEPT = 0;
     virtual void destroy_deallocate() _NOEXCEPT = 0;
     virtual _Rp operator()(_ArgTypes&& ...) = 0;
+#if 0
 #ifndef _LIBCPP_NO_RTTI
     virtual const void* target(const type_info&) const _NOEXCEPT = 0;
     virtual const std::type_info& target_type() const _NOEXCEPT = 0;
 #endif // _LIBCPP_NO_RTTI
+#else
+    const void* const __type_info;
+#endif
 };
 
 // __func implements __base for a given functor type.
@@ -587,8 +593,12 @@ struct __policy
     // True if this is the null policy (no value).
     const bool __is_null;
 
+#ifndef _LIBCPP_NO_RTTI
     // The target type. May be null if RTTI is disabled.
     const std::type_info* const __type_info;
+#else
+    const int* const __type_info;
+#endif
 
     // Returns a pointer to a static policy object suitable for the functor
     // type.
@@ -832,7 +842,7 @@ template <class _Rp, class... _ArgTypes> class __policy_func<_Rp(_ArgTypes...)>
     _LIBCPP_INLINE_VISIBILITY
     _Rp operator()(_ArgTypes&&... __args) const
     {
-        return __invoker_.__call_(_VSTD::addressof(__buf_),
+        return __invoker_.__call_(__builtin_addressof(__buf_),
                                   _VSTD::forward<_ArgTypes>(__args)...);
     }
 
@@ -1860,7 +1870,7 @@ template<class _Rp>
 void
 function<_Rp()>::swap(function& __f)
 {
-    if (_VSTD::addressof(__f) == this)
+    if (__builtin_addressof(__f) == this)
       return;
     if (__f_ == (__base*)&__buf_ && __f.__f_ == (__base*)&__f.__buf_)
     {
@@ -2140,7 +2150,7 @@ template<class _Rp, class _A0>
 void
 function<_Rp(_A0)>::swap(function& __f)
 {
-    if (_VSTD::addressof(__f) == this)
+    if (__builtin_addressof(__f) == this)
       return;
     if (__f_ == (__base*)&__buf_ && __f.__f_ == (__base*)&__f.__buf_)
     {
@@ -2420,7 +2430,7 @@ template<class _Rp, class _A0, class _A1>
 void
 function<_Rp(_A0, _A1)>::swap(function& __f)
 {
-    if (_VSTD::addressof(__f) == this)
+    if (__builtin_addressof(__f) == this)
       return;
     if (__f_ == (__base*)&__buf_ && __f.__f_ == (__base*)&__f.__buf_)
     {
@@ -2700,7 +2710,7 @@ template<class _Rp, class _A0, class _A1, class _A2>
 void
 function<_Rp(_A0, _A1, _A2)>::swap(function& __f)
 {
-    if (_VSTD::addressof(__f) == this)
+    if (__builtin_addressof(__f) == this)
       return;
     if (__f_ == (__base*)&__buf_ && __f.__f_ == (__base*)&__f.__buf_)
     {

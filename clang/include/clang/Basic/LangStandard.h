@@ -33,6 +33,8 @@ enum class Language : uint8_t {
   ObjCXX,
   OpenCL,
   OpenCLCXX,
+  Metal,
+  Vulkan,
   CUDA,
   RenderScript,
   HIP,

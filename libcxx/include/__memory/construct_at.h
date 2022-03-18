@@ -67,14 +67,14 @@ template <class _ForwardIterator>
 _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_AFTER_CXX17
 void destroy(_ForwardIterator __first, _ForwardIterator __last) {
     for (; __first != __last; ++__first)
-        _VSTD::destroy_at(_VSTD::addressof(*__first));
+        _VSTD::destroy_at(__builtin_addressof(*__first));
 }
 
 template <class _ForwardIterator, class _Size>
 _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_AFTER_CXX17
 _ForwardIterator destroy_n(_ForwardIterator __first, _Size __n) {
     for (; __n > 0; (void)++__first, --__n)
-        _VSTD::destroy_at(_VSTD::addressof(*__first));
+        _VSTD::destroy_at(__builtin_addressof(*__first));
     return __first;
 }
 

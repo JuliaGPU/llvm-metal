@@ -192,6 +192,9 @@ void tools::gcc::Compiler::RenderExtraToolArgs(const JobAction &JA,
   case types::TY_LTO_IR:
   case types::TY_LLVM_BC:
   case types::TY_LTO_BC:
+  case types::TY_LLVM_BC_32:
+  case types::TY_LLVM_BC_50:
+  case types::TY_METALLIB:
     CmdArgs.push_back("-c");
     break;
   // We assume we've got an "integrated" assembler in that gcc will produce an

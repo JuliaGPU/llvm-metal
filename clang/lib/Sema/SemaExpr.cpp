@@ -3830,14 +3830,9 @@ ExprResult Sema::ActOnNumericConstant(const Token &Tok, Scope *UDLScope) {
                                               Tok.getLocation(), scale);
   } else if (Literal.isFloatingLiteral()) {
     QualType Ty;
-    if (Literal.isHalf){
-      if (getOpenCLOptions().isAvailableOption("cl_khr_fp16", getLangOpts()))
-        Ty = Context.HalfTy;
-      else {
-        Diag(Tok.getLocation(), diag::err_half_const_requires_fp16);
-        return ExprError();
-      }
-    } else if (Literal.isFloat)
+    if (Literal.isHalf)
+      Ty = Context.HalfTy;
+    else if (Literal.isFloat)
       Ty = Context.FloatTy;
     else if (Literal.isLong)
       Ty = Context.LongDoubleTy;
@@ -4081,8 +4076,8 @@ static bool CheckExtensionTraitOperandType(Sema &S, QualType T,
   // Allow sizeof(void)/alignof(void) as an extension, unless in OpenCL where
   // this is an error (OpenCL v1.1 s6.3.k)
   if (T->isVoidType()) {
-    unsigned DiagID = S.LangOpts.OpenCL ? diag::err_opencl_sizeof_alignof_type
-                                        : diag::ext_sizeof_alignof_void_type;
+    unsigned DiagID = S.LangOpts.OpenCL && !S.LangOpts.CPlusPlus ?
+      diag::err_opencl_sizeof_alignof_type : diag::ext_sizeof_alignof_void_type;
     S.Diag(Loc, DiagID) << getTraitSpelling(TraitKind) << ArgRange;
     return false;
   }
@@ -6816,7 +6811,7 @@ ExprResult Sema::BuildResolvedCallExpr(Expr *Fn, NamedDecl *NDecl,
   if (getLangOpts().CUDA) {
     if (Config) {
       // CUDA: Kernel calls must be to global functions
-      if (FDecl && !FDecl->hasAttr<CUDAGlobalAttr>())
+      if (FDecl && !FDecl->hasAttr<ComputeKernelAttr>())
         return ExprError(Diag(LParenLoc,diag::err_kern_call_not_global_function)
             << FDecl << Fn->getSourceRange());
 
@@ -6828,7 +6823,7 @@ ExprResult Sema::BuildResolvedCallExpr(Expr *Fn, NamedDecl *NDecl,
             << Fn->getType() << Fn->getSourceRange());
     } else {
       // CUDA: Calls to global functions must be configured
-      if (FDecl && FDecl->hasAttr<CUDAGlobalAttr>())
+      if (FDecl && FDecl->hasAttr<ComputeKernelAttr>())
         return ExprError(Diag(LParenLoc, diag::err_global_call_not_config)
             << FDecl << Fn->getSourceRange());
     }
@@ -14160,7 +14155,8 @@ ExprResult Sema::CreateBuiltinBinOp(SourceLocation OpLoc,
     // OpenCL special types - image, sampler, pipe, and blocks are to be used
     // only with a builtin functions and therefore should be disallowed here.
     if (LHSTy->isImageType() || RHSTy->isImageType() ||
-        LHSTy->isSamplerT() || RHSTy->isSamplerT() ||
+        // NOTE: sampler operations are allowed (these are integers)
+        //LHSTy->isSamplerT() || RHSTy->isSamplerT() ||
         LHSTy->isPipeType() || RHSTy->isPipeType() ||
         LHSTy->isBlockPointerType() || RHSTy->isBlockPointerType()) {
       ResultTy = InvalidOperands(OpLoc, LHS, RHS);

@@ -25,7 +25,9 @@
 #include <__memory/unique_ptr.h>
 #include <__utility/forward.h>
 #include <cstddef>
+#if 0
 #include <cstdlib> // abort
+#endif
 #include <iosfwd>
 #include <stdexcept>
 #include <typeinfo>
@@ -128,7 +130,7 @@ public:
     bad_weak_ptr() _NOEXCEPT = default;
     bad_weak_ptr(const bad_weak_ptr&) _NOEXCEPT = default;
     virtual ~bad_weak_ptr() _NOEXCEPT;
-    virtual const char* what() const  _NOEXCEPT;
+    virtual constant const char* what() const  _NOEXCEPT;
 };
 
 _LIBCPP_NORETURN inline _LIBCPP_INLINE_VISIBILITY
@@ -137,7 +139,7 @@ void __throw_bad_weak_ptr()
 #ifndef _LIBCPP_NO_EXCEPTIONS
     throw bad_weak_ptr();
 #else
-    _VSTD::abort();
+    __builtin_unreachable();
 #endif
 }
 
@@ -222,7 +224,9 @@ public:
     long use_count() const _NOEXCEPT {return __shared_count::use_count();}
     __shared_weak_count* lock() _NOEXCEPT;
 
+#ifndef _LIBCPP_NO_RTTI
     virtual const void* __get_deleter(const type_info&) const _NOEXCEPT;
+#endif
 private:
     virtual void __on_zero_shared_weak() _NOEXCEPT = 0;
 };
@@ -252,7 +256,7 @@ template <class _Tp, class _Dp, class _Alloc>
 const void*
 __shared_ptr_pointer<_Tp, _Dp, _Alloc>::__get_deleter(const type_info& __t) const _NOEXCEPT
 {
-    return __t == typeid(_Dp) ? _VSTD::addressof(__data_.first().second()) : nullptr;
+    return __t == typeid(_Dp) ? __builtin_addressof(__data_.first().second()) : nullptr;
 }
 
 #endif // _LIBCPP_NO_RTTI
@@ -504,13 +508,13 @@ public:
             typedef __allocator_destructor<_A2> _D2;
             _A2 __a2(__a);
             unique_ptr<_CntrlBlk, _D2> __hold2(__a2.allocate(1), _D2(__a2, 1));
-            ::new ((void*)_VSTD::addressof(*__hold2.get()))
+            ::new ((void*)__builtin_addressof(*__hold2.get()))
 #ifndef _LIBCPP_CXX03_LANG
                 _CntrlBlk(__p, _VSTD::move(__d), __a);
 #else
                 _CntrlBlk(__p, __d, __a);
 #endif // not _LIBCPP_CXX03_LANG
-            __cntrl_ = _VSTD::addressof(*__hold2.release());
+            __cntrl_ = __builtin_addressof(*__hold2.release());
             __enable_weak_this(__p, __p);
 #ifndef _LIBCPP_NO_EXCEPTIONS
         }
@@ -562,13 +566,13 @@ public:
             typedef __allocator_destructor<_A2> _D2;
             _A2 __a2(__a);
             unique_ptr<_CntrlBlk, _D2> __hold2(__a2.allocate(1), _D2(__a2, 1));
-            ::new ((void*)_VSTD::addressof(*__hold2.get()))
+            ::new ((void*)__builtin_addressof(*__hold2.get()))
 #ifndef _LIBCPP_CXX03_LANG
                 _CntrlBlk(__p, _VSTD::move(__d), __a);
 #else
                 _CntrlBlk(__p, __d, __a);
 #endif // not _LIBCPP_CXX03_LANG
-            __cntrl_ = _VSTD::addressof(*__hold2.release());
+            __cntrl_ = __builtin_addressof(*__hold2.release());
 #ifndef _LIBCPP_NO_EXCEPTIONS
         }
         catch (...)
@@ -951,9 +955,9 @@ shared_ptr<_Tp> allocate_shared(const _Alloc& __a, _Args&& ...__args)
     using _ControlBlock = __shared_ptr_emplace<_Tp, _Alloc>;
     using _ControlBlockAllocator = typename __allocator_traits_rebind<_Alloc, _ControlBlock>::type;
     __allocation_guard<_ControlBlockAllocator> __guard(__a, 1);
-    ::new ((void*)_VSTD::addressof(*__guard.__get())) _ControlBlock(__a, _VSTD::forward<_Args>(__args)...);
+    ::new ((void*)__builtin_addressof(*__guard.__get())) _ControlBlock(__a, _VSTD::forward<_Args>(__args)...);
     auto __control_block = __guard.__release_ptr();
-    return shared_ptr<_Tp>::__create_with_control_block((*__control_block).__get_elem(), _VSTD::addressof(*__control_block));
+    return shared_ptr<_Tp>::__create_with_control_block((*__control_block).__get_elem(), __builtin_addressof(*__control_block));
 }
 
 template<class _Tp, class ..._Args, class = __enable_if_t<!is_array<_Tp>::value> >

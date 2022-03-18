@@ -30,6 +30,7 @@
 #include "llvm/IR/DebugInfo.h"
 #include "llvm/IR/ValueHandle.h"
 #include "llvm/Support/Allocator.h"
+#include <unordered_map>
 
 namespace llvm {
 class MDNode;
@@ -78,6 +79,7 @@ class CGDebugInfo {
   llvm::DIType *OCLQueueDITy = nullptr;
   llvm::DIType *OCLNDRangeDITy = nullptr;
   llvm::DIType *OCLReserveIDDITy = nullptr;
+  llvm::DIType *OCLPatchControlPointTyDITy = nullptr;
 #define EXT_OPAQUE_TYPE(ExtType, Id, Ext) \
   llvm::DIType *Id##Ty = nullptr;
 #include "clang/Basic/OpenCLExtensionTypes.def"
@@ -150,7 +152,7 @@ class CGDebugInfo {
   llvm::BumpPtrAllocator DebugInfoNames;
   StringRef CWDName;
 
-  llvm::DenseMap<const char *, llvm::TrackingMDRef> DIFileCache;
+  std::unordered_map<std::string, llvm::TrackingMDRef> DIFileCache;
   llvm::DenseMap<const FunctionDecl *, llvm::TrackingMDRef> SPCache;
   /// Cache declarations relevant to DW_TAG_imported_declarations (C++
   /// using declarations) that aren't covered by other more specific caches.

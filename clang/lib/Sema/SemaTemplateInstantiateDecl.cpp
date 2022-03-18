@@ -643,6 +643,37 @@ attrToRetainOwnershipKind(const Attr *A) {
   }
 }
 
+static void instantiateDependentFloorImageDataTypeAttr(
+    Sema &S, const MultiLevelTemplateArgumentList &TemplateArgs,
+    const FloorImageDataTypeAttr *A, const Decl *Tmpl, Decl *New) {
+  TypeSourceInfo *Result = S.SubstType(A->getImageDataTypeLoc(), TemplateArgs,
+                                       A->getLocation(), DeclarationName());
+  if (Result) {
+    FloorImageDataTypeAttr *new_attr = new (S.getASTContext())
+        FloorImageDataTypeAttr(S.getASTContext(), *A, Result);
+    New->addAttr(new_attr);
+  }
+}
+
+static void instantiateDependentFloorImageFlagsAttr(
+    Sema &S, const MultiLevelTemplateArgumentList &TemplateArgs,
+    const FloorImageFlagsAttr *A, const Decl *Tmpl, Decl *New) {
+  EnterExpressionEvaluationContext Unevaluated(S, Sema::ExpressionEvaluationContext::ConstantEvaluated);
+  ExprResult Result = S.SubstExpr(A->getImageFlags(), TemplateArgs);
+  if (!Result.isInvalid())
+    S.AddFloorImageFlagsAttr(A->getLocation(), New, Result.getAs<Expr>(), *A);
+}
+
+static void instantiateDependentGraphicsFBOColorLocationAttr(
+    Sema &S, const MultiLevelTemplateArgumentList &TemplateArgs,
+    const GraphicsFBOColorLocationAttr *A, const Decl *Tmpl, Decl *New) {
+  // TODO: check Tmpl with isPotentialConstantExprUnevaluated?
+  EnterExpressionEvaluationContext Unevaluated(S, Sema::ExpressionEvaluationContext::ConstantEvaluated);
+  ExprResult Result = S.SubstExpr(A->getColorLocation(), TemplateArgs);
+  if (!Result.isInvalid())
+    S.AddGraphicsFBOColorLocationAttr(A->getLocation(), New, Result.getAs<Expr>(), *A);
+}
+
 void Sema::InstantiateAttrs(const MultiLevelTemplateArgumentList &TemplateArgs,
                             const Decl *Tmpl, Decl *New,
                             LateInstantiatedAttrVec *LateAttrs,
@@ -758,6 +789,22 @@ void Sema::InstantiateAttrs(const MultiLevelTemplateArgumentList &TemplateArgs,
 
     if (auto *A = dyn_cast<SYCLKernelAttr>(TmplAttr)) {
       instantiateDependentSYCLKernelAttr(*this, TemplateArgs, *A, New);
+      continue;
+    }
+
+    auto *ImgType = dyn_cast<FloorImageDataTypeAttr>(TmplAttr);
+    if (ImgType && ImgType->getImageDataType()->isDependentType()) {
+      instantiateDependentFloorImageDataTypeAttr(*this, TemplateArgs, ImgType, Tmpl, New);
+      continue;
+    }
+
+    if (auto *ImgFlags = dyn_cast<FloorImageFlagsAttr>(TmplAttr)) {
+      instantiateDependentFloorImageFlagsAttr(*this, TemplateArgs, ImgFlags, Tmpl, New);
+      continue;
+    }
+
+    if (auto *ColorLoc = dyn_cast<GraphicsFBOColorLocationAttr>(TmplAttr)) {
+      instantiateDependentGraphicsFBOColorLocationAttr(*this, TemplateArgs, ColorLoc, Tmpl, New);
       continue;
     }
 

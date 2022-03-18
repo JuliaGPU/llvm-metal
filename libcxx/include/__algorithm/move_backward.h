@@ -11,7 +11,9 @@
 
 #include <__config>
 #include <__algorithm/unwrap_iter.h>
+#if 0
 #include <cstring>
+#endif
 #include <utility>
 #include <type_traits>
 
@@ -53,7 +55,7 @@ __move_backward(_Tp* __first, _Tp* __last, _Up* __result)
     if (__n > 0)
     {
         __result -= __n;
-        _VSTD::memmove(__result, __first, __n * sizeof(_Up));
+        __builtin_memmove(__result, __first, __n * sizeof(_Up));
     }
     return __result;
 }

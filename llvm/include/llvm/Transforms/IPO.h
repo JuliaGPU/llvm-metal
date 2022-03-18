@@ -117,6 +117,12 @@ Pass *createFunctionInliningPass(unsigned OptLevel, unsigned SizeOptLevel,
 Pass *createFunctionInliningPass(InlineParams &Params);
 
 //===----------------------------------------------------------------------===//
+/// createEverythingInlinerPass - Return a new pass object that inlines
+/// everything, unless it was marked "noinline".
+Pass *createEverythingInlinerPass();
+Pass *createEverythingInlinerPass(bool InsertLifetime);
+
+//===----------------------------------------------------------------------===//
 /// createPruneEHPass - Return a new pass object which transforms invoke
 /// instructions into calls, if the callee can _not_ unwind the stack.
 ///

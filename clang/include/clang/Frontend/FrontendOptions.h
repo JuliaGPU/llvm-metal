@@ -60,6 +60,21 @@ enum ActionKind {
   /// Emit a .bc file.
   EmitBC,
 
+  /// Emit a LLVM 3.2 .bc file.
+  EmitBC32,
+
+  /// Emit a LLVM 5.0 .bc file.
+  EmitBC50,
+
+  /// Emit a .spv file.
+  EmitSPIRV,
+
+  /// Emit a .spvc container file.
+  EmitSPIRVContainer,
+
+  /// Emit a .metallib file.
+  EmitMetalLib,
+
   /// Translate input source into HTML.
   EmitHTML,
 

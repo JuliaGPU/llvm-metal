@@ -890,6 +890,8 @@ void PrintPreambleAction::ExecuteAction() {
   case Language::ObjC:
   case Language::ObjCXX:
   case Language::OpenCL:
+  case Language::Metal:
+  case Language::Vulkan:
   case Language::OpenCLCXX:
   case Language::CUDA:
   case Language::HIP:

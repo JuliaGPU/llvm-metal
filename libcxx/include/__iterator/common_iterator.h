@@ -42,7 +42,7 @@ class common_iterator {
 
   public:
     const iter_value_t<_Iter>* operator->() const {
-      return _VSTD::addressof(__value);
+      return __builtin_addressof(__value);
     }
   };
 
@@ -134,7 +134,7 @@ public:
       return _VSTD::__unchecked_get<_Iter>(__hold_);
     } else if constexpr (is_reference_v<iter_reference_t<_Iter>>) {
       auto&& __tmp = *_VSTD::__unchecked_get<_Iter>(__hold_);
-      return _VSTD::addressof(__tmp);
+      return __builtin_addressof(__tmp);
     } else {
       return __proxy(*_VSTD::__unchecked_get<_Iter>(__hold_));
     }

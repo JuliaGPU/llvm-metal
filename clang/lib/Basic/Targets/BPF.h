@@ -95,7 +95,7 @@ public:
     default:
       return CCCR_Warning;
     case CC_C:
-    case CC_OpenCLKernel:
+    case CC_FloorKernel:
       return CCCR_OK;
     }
   }

@@ -431,7 +431,7 @@ public:
   /// global value is specified, and if that global has an explicit alignment
   /// requested, it will override the alignment request if required for
   /// correctness.
-  void emitAlignment(Align Alignment, const GlobalObject *GV = nullptr) const;
+  virtual void emitAlignment(Align Alignment, const GlobalObject *GV = nullptr) const;
 
   /// Lower the specified LLVM Constant to an MCExpr.
   virtual const MCExpr *lowerConstant(const Constant *CV);

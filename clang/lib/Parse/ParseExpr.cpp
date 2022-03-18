@@ -1526,8 +1526,10 @@ ExprResult Parser::ParseCastExpression(CastParseKind ParseKind,
   case tok::kw_typename:
   case tok::kw_typeof:
   case tok::kw___vector:
-#define GENERIC_IMAGE_TYPE(ImgType, Id) case tok::kw_##ImgType##_t:
-#include "clang/Basic/OpenCLImageTypes.def"
+  case tok::kw_sampler_t:
+  case tok::kw_event_t:
+  case tok::kw_queue_t:
+  case tok::kw_clk_event_t:
   {
     if (!getLangOpts().CPlusPlus) {
       Diag(Tok, diag::err_expected_expression);
@@ -1811,7 +1813,7 @@ ExprResult Parser::ParseCastExpression(CastParseKind ParseKind,
   // These can be followed by postfix-expr pieces.
   PreferredType = SavedType;
   Res = ParsePostfixExpressionSuffix(Res);
-  if (getLangOpts().OpenCL &&
+  if (getLangOpts().OpenCL && !getLangOpts().CPlusPlus &&
       !getActions().getOpenCLOptions().isAvailableOption(
           "__cl_clang_function_pointers", getLangOpts()))
     if (Expr *PostfixExpr = Res.get()) {

@@ -137,12 +137,17 @@ bool types::isAcceptedByClang(ID Id) {
   case TY_ObjCXX: case TY_PP_ObjCXX: case TY_PP_ObjCXX_Alias:
   case TY_CHeader: case TY_PP_CHeader:
   case TY_CLHeader:
+  case TY_CUDAHeader: case TY_PP_CUDAHeader:
+  case TY_MetalHeader: case TY_VulkanHeader:
   case TY_ObjCHeader: case TY_PP_ObjCHeader:
   case TY_CXXHeader: case TY_PP_CXXHeader:
   case TY_ObjCXXHeader: case TY_PP_ObjCXXHeader:
   case TY_CXXModule: case TY_PP_CXXModule:
   case TY_AST: case TY_ModuleFile: case TY_PCH:
   case TY_LLVM_IR: case TY_LLVM_BC:
+  case TY_LLVM_BC_32: case TY_LLVM_BC_50:
+  case TY_SPIRV: case TY_SPIRVC:
+  case TY_METALLIB:
     return true;
   }
 }
@@ -212,6 +217,7 @@ bool types::isCXX(ID Id) {
   case TY_ObjCXXHeader: case TY_PP_ObjCXXHeader:
   case TY_CXXModule: case TY_PP_CXXModule:
   case TY_CUDA: case TY_PP_CUDA: case TY_CUDA_DEVICE:
+  case TY_CUDAHeader: case TY_PP_CUDAHeader:
   case TY_HIP:
   case TY_PP_HIP:
   case TY_HIP_DEVICE:
@@ -226,6 +232,8 @@ bool types::isLLVMIR(ID Id) {
 
   case TY_LLVM_IR:
   case TY_LLVM_BC:
+  case TY_LLVM_BC_32:
+  case TY_LLVM_BC_50:
   case TY_LTO_IR:
   case TY_LTO_BC:
     return true;
@@ -240,6 +248,8 @@ bool types::isCuda(ID Id) {
   case TY_CUDA:
   case TY_PP_CUDA:
   case TY_CUDA_DEVICE:
+  case TY_CUDAHeader:
+  case TY_PP_CUDAHeader:
     return true;
   }
 }
@@ -285,6 +295,11 @@ types::ID types::lookupTypeForExtension(llvm::StringRef Ext) {
            .Case("S", TY_Asm)
            .Case("s", TY_PP_Asm)
            .Case("bc", TY_LLVM_BC)
+           .Case("bc32", TY_LLVM_BC_32) // not ideal
+           .Case("bc50", TY_LLVM_BC_50) // not ideal
+           .Case("spv", TY_SPIRV)
+           .Case("spvc", TY_SPIRVC)
+           .Case("metallib", TY_METALLIB)
            .Case("cc", TY_CXX)
            .Case("CC", TY_CXX)
            .Case("cl", TY_CL)

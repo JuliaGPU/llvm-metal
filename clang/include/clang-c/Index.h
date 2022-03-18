@@ -2631,7 +2631,7 @@ enum CXCursorKind {
   CXCursor_NoDuplicateAttr = 411,
   CXCursor_CUDAConstantAttr = 412,
   CXCursor_CUDADeviceAttr = 413,
-  CXCursor_CUDAGlobalAttr = 414,
+  CXCursor_ComputeKernelAttr = 414,
   CXCursor_CUDAHostAttr = 415,
   CXCursor_CUDASharedAttr = 416,
   CXCursor_VisibilityAttr = 417,
@@ -3341,6 +3341,7 @@ enum CXTypeKind {
   CXType_Pipe = 120,
 
   /* OpenCL builtin types. */
+#if 0 // OpenCL image types with access qualifiers
   CXType_OCLImage1dRO = 121,
   CXType_OCLImage1dArrayRO = 122,
   CXType_OCLImage1dBufferRO = 123,
@@ -3377,6 +3378,24 @@ enum CXTypeKind {
   CXType_OCLImage2dMSAADepthRW = 154,
   CXType_OCLImage2dArrayMSAADepthRW = 155,
   CXType_OCLImage3dRW = 156,
+#else // OpenCL image types without access qualifiers
+  CXType_OCLImage1d = 121,
+  CXType_OCLImage1dArray = 122,
+  CXType_OCLImage1dBuffer = 123,
+  CXType_OCLImage2d = 124,
+  CXType_OCLImage2dArray = 125,
+  CXType_OCLImage2dDepth = 126,
+  CXType_OCLImage2dArrayDepth = 127,
+  CXType_OCLImage2dMSAA = 128,
+  CXType_OCLImage2dArrayMSAA = 129,
+  CXType_OCLImage2dMSAADepth = 130,
+  CXType_OCLImage2dArrayMSAADepth = 131,
+  CXType_OCLImage3d = 132,
+  CXType_OCLImageCube = 133,
+  CXType_OCLImageCubeArray = 134,
+  CXType_OCLImageCubeDepth = 135,
+  CXType_OCLImageCubeArrayDepth = 136,
+#endif
   CXType_OCLSampler = 157,
   CXType_OCLEvent = 158,
   CXType_OCLQueue = 159,
@@ -3428,6 +3447,13 @@ enum CXCallingConv {
   CXCallingConv_PreserveAll = 15,
   CXCallingConv_AArch64VectorCall = 16,
   CXCallingConv_SwiftAsync = 17,
+
+  CXCallingConv_FloorFunction = 40,
+  CXCallingConv_FloorKernel = 41,
+  CXCallingConv_FloorVertex = 42,
+  CXCallingConv_FloorFragment = 43,
+  CXCallingConv_FloorTessControl = 44,
+  CXCallingConv_FloorTessEval = 45,
 
   CXCallingConv_Invalid = 100,
   CXCallingConv_Unexposed = 200

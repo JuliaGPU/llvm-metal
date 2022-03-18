@@ -55,7 +55,7 @@ public:
             : __i(__u.base())
     {
 #if _LIBCPP_DEBUG_LEVEL == 2
-        __get_db()->__iterator_copy(this, _VSTD::addressof(__u));
+        __get_db()->__iterator_copy(this, __builtin_addressof(__u));
 #endif
     }
 #if _LIBCPP_DEBUG_LEVEL == 2
@@ -63,14 +63,14 @@ public:
     __wrap_iter(const __wrap_iter& __x)
         : __i(__x.base())
     {
-        __get_db()->__iterator_copy(this, _VSTD::addressof(__x));
+        __get_db()->__iterator_copy(this, __builtin_addressof(__x));
     }
     _LIBCPP_INLINE_VISIBILITY _LIBCPP_CONSTEXPR_IF_NODEBUG
     __wrap_iter& operator=(const __wrap_iter& __x)
     {
-        if (this != _VSTD::addressof(__x))
+        if (this != __builtin_addressof(__x))
         {
-            __get_db()->__iterator_copy(this, _VSTD::addressof(__x));
+            __get_db()->__iterator_copy(this, __builtin_addressof(__x));
             __i = __x.__i;
         }
         return *this;
@@ -181,7 +181,7 @@ _LIBCPP_INLINE_VISIBILITY _LIBCPP_CONSTEXPR_IF_NODEBUG
 bool operator<(const __wrap_iter<_Iter1>& __x, const __wrap_iter<_Iter1>& __y) _NOEXCEPT
 {
 #if _LIBCPP_DEBUG_LEVEL == 2
-    _LIBCPP_ASSERT(__get_const_db()->__less_than_comparable(_VSTD::addressof(__x), _VSTD::addressof(__y)),
+    _LIBCPP_ASSERT(__get_const_db()->__less_than_comparable(__builtin_addressof(__x), __builtin_addressof(__y)),
                    "Attempted to compare incomparable iterators");
 #endif
     return __x.base() < __y.base();
@@ -265,7 +265,7 @@ operator-(const __wrap_iter<_Iter1>& __x, const __wrap_iter<_Iter2>& __y) _NOEXC
 #endif // C++03
 {
 #if _LIBCPP_DEBUG_LEVEL == 2
-    _LIBCPP_ASSERT(__get_const_db()->__less_than_comparable(_VSTD::addressof(__x), _VSTD::addressof(__y)),
+    _LIBCPP_ASSERT(__get_const_db()->__less_than_comparable(__builtin_addressof(__x), __builtin_addressof(__y)),
                    "Attempted to subtract incompatible iterators");
 #endif
     return __x.base() - __y.base();

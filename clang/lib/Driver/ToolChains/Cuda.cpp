@@ -65,6 +65,10 @@ CudaVersion getCudaVersion(uint32_t raw_version) {
     return CudaVersion::CUDA_113;
   if (raw_version < 11050)
     return CudaVersion::CUDA_114;
+  if (raw_version < 11060)
+    return CudaVersion::CUDA_115;
+  if (raw_version < 11070)
+    return CudaVersion::CUDA_116;
   return CudaVersion::NEW;
 }
 
@@ -701,6 +705,7 @@ void CudaToolChain::addClangTargetOptions(
   // New CUDA versions often introduce new instructions that are only supported
   // by new PTX version, so we need to raise PTX level to enable them in NVPTX
   // back-end.
+#if 0 // we don't want this - the actual PTX version will be set elsewhere
   const char *PtxFeature = nullptr;
   switch (CudaInstallationVersion) {
 #define CASE_CUDA_VERSION(CUDA_VER, PTX_VER)                                   \
@@ -722,6 +727,10 @@ void CudaToolChain::addClangTargetOptions(
   default:
     PtxFeature = "+ptx42";
   }
+#else
+  // default to the min support libfloor PTX version (CUDA 9.0+)
+  const char *PtxFeature = "+ptx60";
+#endif
   CC1Args.append({"-target-feature", PtxFeature});
   if (DriverArgs.hasFlag(options::OPT_fcuda_short_ptr,
                          options::OPT_fno_cuda_short_ptr, false))

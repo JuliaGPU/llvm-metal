@@ -327,6 +327,7 @@ public:
     case OCLTK_ClkEvent:
     case OCLTK_Queue:
     case OCLTK_ReserveID:
+    case OCLTK_PatchControlPoint:
       return LangAS::opencl_global;
 
     default:
@@ -410,7 +411,7 @@ public:
     default:
       return CCCR_Warning;
     case CC_C:
-    case CC_OpenCLKernel:
+    case CC_FloorKernel:
       return CCCR_OK;
     }
   }

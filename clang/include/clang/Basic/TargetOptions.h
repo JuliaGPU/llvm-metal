@@ -69,7 +69,7 @@ public:
   std::vector<std::string> OpenCLExtensionsAsWritten;
 
   /// If given, enables support for __int128_t and __uint128_t types.
-  bool ForceEnableInt128 = false;
+  bool ForceEnableInt128 = true;
 
   /// \brief If enabled, use 32-bit pointers for accessing const/local/shared
   /// address space.

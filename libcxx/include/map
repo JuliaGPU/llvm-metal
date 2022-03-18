@@ -651,9 +651,9 @@ public:
     void operator()(pointer __p) _NOEXCEPT
     {
         if (__second_constructed)
-            __alloc_traits::destroy(__na_, _VSTD::addressof(__p->__value_.__get_value().second));
+            __alloc_traits::destroy(__na_, __builtin_addressof(__p->__value_.__get_value().second));
         if (__first_constructed)
-            __alloc_traits::destroy(__na_, _VSTD::addressof(__p->__value_.__get_value().first));
+            __alloc_traits::destroy(__na_, __builtin_addressof(__p->__value_.__get_value().first));
         if (__p)
             __alloc_traits::deallocate(__na_, __p, 1);
     }
@@ -684,7 +684,7 @@ public:
     value_type& __get_value()
     {
 #if _LIBCPP_STD_VER > 14
-        return *_VSTD::launder(_VSTD::addressof(__cc));
+        return *_VSTD::launder(__builtin_addressof(__cc));
 #else
         return __cc;
 #endif
@@ -694,7 +694,7 @@ public:
     const value_type& __get_value() const
     {
 #if _LIBCPP_STD_VER > 14
-        return *_VSTD::launder(_VSTD::addressof(__cc));
+        return *_VSTD::launder(__builtin_addressof(__cc));
 #else
         return __cc;
 #endif
@@ -1567,9 +1567,9 @@ map<_Key, _Tp, _Compare, _Allocator>::__construct_node_with_key(const key_type& 
 {
     __node_allocator& __na = __tree_.__node_alloc();
     __node_holder __h(__node_traits::allocate(__na, 1), _Dp(__na));
-    __node_traits::construct(__na, _VSTD::addressof(__h->__value_.__get_value().first), __k);
+    __node_traits::construct(__na, __builtin_addressof(__h->__value_.__get_value().first), __k);
     __h.get_deleter().__first_constructed = true;
-    __node_traits::construct(__na, _VSTD::addressof(__h->__value_.__get_value().second));
+    __node_traits::construct(__na, __builtin_addressof(__h->__value_.__get_value().second));
     __h.get_deleter().__second_constructed = true;
     return __h;
 }

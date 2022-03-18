@@ -798,7 +798,7 @@ void CodeGenPGO::assignRegionCounters(GlobalDecl GD, llvm::Function *Fn) {
 
   // Skip CUDA/HIP kernel launch stub functions.
   if (CGM.getLangOpts().CUDA && !CGM.getLangOpts().CUDAIsDevice &&
-      D->hasAttr<CUDAGlobalAttr>())
+      D->hasAttr<ComputeKernelAttr>())
     return;
 
   bool InstrumentRegions = CGM.getCodeGenOpts().hasProfileClangInstr();
@@ -871,9 +871,9 @@ bool CodeGenPGO::skipRegionMappingForDecl(const Decl *D) {
   // ones, their coverage mapping may still be generated.
   if (CGM.getLangOpts().CUDA &&
       ((CGM.getLangOpts().CUDAIsDevice && !D->hasAttr<CUDADeviceAttr>() &&
-        !D->hasAttr<CUDAGlobalAttr>()) ||
+        !D->hasAttr<ComputeKernelAttr>()) ||
        (!CGM.getLangOpts().CUDAIsDevice &&
-        (D->hasAttr<CUDAGlobalAttr>() ||
+        (D->hasAttr<ComputeKernelAttr>() ||
          (!D->hasAttr<CUDAHostAttr>() && D->hasAttr<CUDADeviceAttr>())))))
     return true;
 

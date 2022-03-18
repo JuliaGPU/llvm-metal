@@ -564,7 +564,7 @@ struct __tree_key_value_types {
   }
   _LIBCPP_INLINE_VISIBILITY
   static __container_value_type* __get_ptr(__node_value_type& __n) {
-    return _VSTD::addressof(__n);
+    return __builtin_addressof(__n);
   }
   _LIBCPP_INLINE_VISIBILITY
   static __container_value_type&& __move(__node_value_type& __v) {
@@ -611,7 +611,7 @@ struct __tree_key_value_types<__value_type<_Key, _Tp> > {
 
   _LIBCPP_INLINE_VISIBILITY
   static __container_value_type* __get_ptr(__node_value_type& __n) {
-    return _VSTD::addressof(__n.__get_value());
+    return __builtin_addressof(__n.__get_value());
   }
 
   _LIBCPP_INLINE_VISIBILITY
@@ -1081,7 +1081,7 @@ public:
         {return static_cast<__node_pointer>(__end_node()->__left_);}
 
     __node_base_pointer* __root_ptr() const _NOEXCEPT {
-        return _VSTD::addressof(__end_node()->__left_);
+        return __builtin_addressof(__end_node()->__left_);
     }
 
     typedef __tree_iterator<value_type, __node_pointer, difference_type>             iterator;
@@ -1977,7 +1977,7 @@ __tree<_Tp, _Compare, _Allocator>::__find_equal(__parent_pointer& __parent,
             if (value_comp()(__v, __nd->__value_))
             {
                 if (__nd->__left_ != nullptr) {
-                    __nd_ptr = _VSTD::addressof(__nd->__left_);
+                    __nd_ptr = __builtin_addressof(__nd->__left_);
                     __nd = static_cast<__node_pointer>(__nd->__left_);
                 } else {
                     __parent = static_cast<__parent_pointer>(__nd);
@@ -1987,7 +1987,7 @@ __tree<_Tp, _Compare, _Allocator>::__find_equal(__parent_pointer& __parent,
             else if (value_comp()(__nd->__value_, __v))
             {
                 if (__nd->__right_ != nullptr) {
-                    __nd_ptr = _VSTD::addressof(__nd->__right_);
+                    __nd_ptr = __builtin_addressof(__nd->__right_);
                     __nd = static_cast<__node_pointer>(__nd->__right_);
                 } else {
                     __parent = static_cast<__parent_pointer>(__nd);

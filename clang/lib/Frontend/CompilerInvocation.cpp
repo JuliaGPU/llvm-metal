@@ -96,6 +96,7 @@
 #include <cstring>
 #include <memory>
 #include <string>
+#include <fstream>
 #include <tuple>
 #include <type_traits>
 #include <utility>
@@ -542,8 +543,10 @@ static unsigned getOptimizationLevel(ArgList &Args, InputKind IK,
                                      DiagnosticsEngine &Diags) {
   unsigned DefaultOpt = llvm::CodeGenOpt::None;
   if ((IK.getLanguage() == Language::OpenCL ||
-       IK.getLanguage() == Language::OpenCLCXX) &&
-      !Args.hasArg(OPT_cl_opt_disable))
+       IK.getLanguage() == Language::OpenCLCXX ||
+       IK.getLanguage() == Language::Metal ||
+       IK.getLanguage() == Language::Vulkan) &&
+      !Args.hasArg(OPT_cl_opt_disable) && !Args.hasArg(OPT_emit_spirv))
     DefaultOpt = llvm::CodeGenOpt::Default;
 
   if (Arg *A = Args.getLastArg(options::OPT_O_Group)) {
@@ -1832,6 +1835,24 @@ bool CompilerInvocation::ParseCodeGenArgs(CodeGenOptions &Opts, ArgList &Args,
     Opts.LinkBitcodeFiles.push_back(F);
   }
 
+  Opts.EmitOpenCLArgMetadata = (Args.hasArg(OPT_cl_kernel_arg_info) ||
+                                Args.hasArg(OPT_emit_spirv) ||
+                                Args.hasArg(OPT_emit_spirv_container));
+  Opts.MetalIntelWorkarounds = Args.hasArg(OPT_metal_intel_workarounds);
+  Opts.MetalNvidiaWorkarounds = Args.hasArg(OPT_metal_nvidia_workarounds);
+  Opts.MetalNoArrayImage = Args.hasArg(OPT_metal_no_array_image);
+  Opts.MetalSoftPrintf = Args.hasArg(OPT_metal_soft_printf);
+  Opts.SPIRIntelWorkarounds = Args.hasArg(OPT_cl_spir_intel_workarounds);
+  Opts.VulkanIUBSize = uint32_t(std::min(uint64_t(~0u),
+      getLastArgUInt64Value(Args, OPT_vulkan_iub_size_EQ, 256)));
+  Opts.VulkanIUBCount = uint32_t(std::min(uint64_t(~0u),
+      getLastArgUInt64Value(Args, OPT_vulkan_iub_count_EQ, 4)));
+  Opts.VulkanLLVMPreStructurizationPass = Args.hasArg(OPT_vulkan_llvm_pre_structurization_pass);
+  Opts.VulkanSoftPrintf = Args.hasArg(OPT_vulkan_soft_printf);
+  Opts.SPIRCompileOptions = Args.getLastArgValue(OPT_cl_spir_compile_options).trim("\t\n\v\f\r\" ");
+  Opts.GraphicsPrimitiveID = Args.hasArg(OPT_graphics_primitive_id);
+  Opts.GraphicsBarycentricCoord = Args.hasArg(OPT_graphics_barycentric_coord);
+
   if (Args.getLastArg(OPT_femulated_tls) ||
       Args.getLastArg(OPT_fno_emulated_tls)) {
     Opts.ExplicitEmulatedTLS = true;
@@ -2403,6 +2424,11 @@ static const auto &getFrontendActionTable() {
       {frontend::DumpTokens, OPT_dump_tokens},
       {frontend::EmitAssembly, OPT_S},
       {frontend::EmitBC, OPT_emit_llvm_bc},
+      {frontend::EmitBC32, OPT_emit_llvm_bc_32},
+      {frontend::EmitBC50, OPT_emit_llvm_bc_50},
+      {frontend::EmitSPIRV, OPT_emit_spirv},
+      {frontend::EmitSPIRVContainer, OPT_emit_spirv_container},
+      {frontend::EmitMetalLib, OPT_emit_metallib},
       {frontend::EmitHTML, OPT_emit_html},
       {frontend::EmitLLVM, OPT_emit_llvm},
       {frontend::EmitLLVMOnly, OPT_emit_llvm_only},
@@ -2571,6 +2597,12 @@ static void GenerateFrontendArgs(const FrontendOptions &Opts,
       break;
     case Language::OpenCL:
       Lang = "cl";
+      break;
+    case Language::Metal:
+      Lang = "metal";
+      break;
+    case Language::Vulkan:
+      Lang = "vulkan";
       break;
     case Language::OpenCLCXX:
       Lang = "clcpp";
@@ -2763,8 +2795,14 @@ static bool ParseFrontendArgs(FrontendOptions &Opts, ArgList &Args,
     DashX = llvm::StringSwitch<InputKind>(XValue)
                 .Case("c", Language::C)
                 .Case("cl", Language::OpenCL)
+                .Case("cl-header", Language::OpenCL)
+                .Case("metal", Language::Metal)
+                .Case("metal-header", Language::Metal)
+                .Case("vulkan", Language::Vulkan)
+                .Case("vulkan-header", Language::Vulkan)
                 .Case("clcpp", Language::OpenCLCXX)
                 .Case("cuda", Language::CUDA)
+                .Case("cuda-header", Language::CUDA)
                 .Case("hip", Language::HIP)
                 .Case("c++", Language::CXX)
                 .Case("objective-c", Language::ObjC)
@@ -3132,6 +3170,12 @@ void CompilerInvocation::setLangDefaults(LangOptions &Opts, InputKind IK,
     case Language::OpenCLCXX:
       LangStd = LangStandard::lang_openclcpp10;
       break;
+    case Language::Metal:
+      LangStd = LangStandard::lang_metal20;
+      break;
+    case Language::Vulkan:
+      LangStd = LangStandard::lang_vulkan12;
+      break;
     case Language::CUDA:
       LangStd = LangStandard::lang_cuda;
       break;
@@ -3199,6 +3243,10 @@ void CompilerInvocation::setLangDefaults(LangOptions &Opts, InputKind IK,
     Opts.OpenCLVersion = 120;
   else if (LangStd == LangStandard::lang_opencl20)
     Opts.OpenCLVersion = 200;
+  else if (LangStd == LangStandard::lang_opencl21)
+    Opts.OpenCLVersion = 210;
+  else if (LangStd == LangStandard::lang_opencl22)
+    Opts.OpenCLVersion = 220;
   else if (LangStd == LangStandard::lang_opencl30)
     Opts.OpenCLVersion = 300;
   else if (LangStd == LangStandard::lang_openclcpp10)
@@ -3206,15 +3254,50 @@ void CompilerInvocation::setLangDefaults(LangOptions &Opts, InputKind IK,
   else if (LangStd == LangStandard::lang_openclcpp2021)
     Opts.OpenCLCPlusPlusVersion = 202100;
 
+  // as Metal is largely compiled as OpenCL, also enable + init opencl
+  if (LangStd == LangStandard::lang_metal20 ||
+      LangStd == LangStandard::lang_metal21 ||
+      LangStd == LangStandard::lang_metal22 ||
+      LangStd == LangStandard::lang_metal23 ||
+      LangStd == LangStandard::lang_metal24 ||
+      IK.getLanguage() == Language::Metal) {
+    Opts.Metal = 1;
+    Opts.OpenCL = 1;
+    Opts.OpenCLVersion = 120;
+
+    if (LangStd == LangStandard::lang_metal20)
+      Opts.MetalVersion = 200;
+    else if (LangStd == LangStandard::lang_metal21)
+      Opts.MetalVersion = 210;
+    else if (LangStd == LangStandard::lang_metal22)
+      Opts.MetalVersion = 220;
+    else if (LangStd == LangStandard::lang_metal23)
+      Opts.MetalVersion = 230;
+    else if (LangStd == LangStandard::lang_metal24)
+      Opts.MetalVersion = 240;
+  }
+
+  // as Vulkan is largely compiled as OpenCL, also enable + init opencl
+  if (LangStd == LangStandard::lang_vulkan12 ||
+      IK.getLanguage() == Language::Vulkan) {
+    Opts.Vulkan = 1;
+    Opts.OpenCL = 1;
+    Opts.OpenCLVersion = 200;
+
+    if (LangStd == LangStandard::lang_vulkan12)
+      Opts.VulkanVersion = 120;
+  }
+
   // OpenCL has some additional defaults.
   if (Opts.OpenCL) {
     Opts.AltiVec = 0;
     Opts.ZVector = 0;
     Opts.setDefaultFPContractMode(LangOptions::FPM_On);
-    Opts.OpenCLCPlusPlus = Opts.CPlusPlus;
-    Opts.OpenCLPipes = Opts.getOpenCLCompatibleVersion() == 200;
-    Opts.OpenCLGenericAddressSpace = Opts.getOpenCLCompatibleVersion() == 200;
+    Opts.OpenCLCPlusPlus = 0; // no, just no ...
+    Opts.OpenCLPipes = Opts.getOpenCLCompatibleVersion() >= 200;
+    Opts.OpenCLGenericAddressSpace = Opts.getOpenCLCompatibleVersion() >= 200;
 
+#if 0 // don't do that
     // Include default header file for OpenCL.
     if (Opts.IncludeDefaultHeader) {
       if (Opts.DeclareOpenCLBuiltins) {
@@ -3224,6 +3307,7 @@ void CompilerInvocation::setLangDefaults(LangOptions &Opts, InputKind IK,
         Includes.push_back("opencl-c.h");
       }
     }
+#endif
   }
 
   Opts.HIP = IK.getLanguage() == Language::HIP;
@@ -3243,13 +3327,15 @@ void CompilerInvocation::setLangDefaults(LangOptions &Opts, InputKind IK,
     Opts.setDefaultFPContractMode(LangOptions::FPM_Fast);
   }
 
+  Opts.FloorHostCompute = (T.getEnvironment() == llvm::Triple::EnvironmentType::FloorHostCompute);
+
   Opts.RenderScript = IK.getLanguage() == Language::RenderScript;
 
   // OpenCL and C++ both have bool, true, false keywords.
   Opts.Bool = Opts.OpenCL || Opts.CPlusPlus;
 
-  // OpenCL has half keyword
-  Opts.Half = Opts.OpenCL;
+  // OpenCL/Vulkan/Metal, CUDA and floor Host-Compute have the half keyword
+  Opts.Half = Opts.OpenCL || Opts.CUDA || Opts.FloorHostCompute;
 }
 
 /// Check if input file kind and language standard are compatible.
@@ -3268,6 +3354,12 @@ static bool IsInputCompatibleWithStandard(InputKind IK,
   case Language::OpenCL:
     return S.getLanguage() == Language::OpenCL ||
            S.getLanguage() == Language::OpenCLCXX;
+
+  case Language::Metal:
+    return S.getLanguage() == Language::Metal;
+
+  case Language::Vulkan:
+    return S.getLanguage() == Language::Vulkan;
 
   case Language::OpenCLCXX:
     return S.getLanguage() == Language::OpenCLCXX;
@@ -3307,6 +3399,10 @@ static const StringRef GetInputKindName(InputKind IK) {
     return "Objective-C++";
   case Language::OpenCL:
     return "OpenCL";
+  case Language::Metal:
+    return "Metal";
+  case Language::Vulkan:
+    return "Vulkan";
   case Language::OpenCLCXX:
     return "C++ for OpenCL";
   case Language::CUDA:
@@ -3351,6 +3447,8 @@ void CompilerInvocation::GenerateLangArgs(const LangOptions &Opts,
   case LangStandard::lang_opencl11:
   case LangStandard::lang_opencl12:
   case LangStandard::lang_opencl20:
+  case LangStandard::lang_opencl21:
+  case LangStandard::lang_opencl22:
   case LangStandard::lang_opencl30:
   case LangStandard::lang_openclcpp10:
   case LangStandard::lang_openclcpp2021:
@@ -3438,7 +3536,7 @@ void CompilerInvocation::GenerateLangArgs(const LangOptions &Opts,
       GenerateArg(Args, OPT_ftrigraphs, SA);
   }
 
-  if (Opts.Blocks && !(Opts.OpenCL && Opts.OpenCLVersion == 200))
+  if (Opts.Blocks && !(Opts.OpenCL && Opts.OpenCLVersion >= 200))
     GenerateArg(Args, OPT_fblocks, SA);
 
   if (Opts.ConvergentFunctions &&
@@ -3662,6 +3760,8 @@ bool CompilerInvocation::ParseLangArgs(LangOptions &Opts, ArgList &Args,
         .Cases("cl1.1", "CL1.1", LangStandard::lang_opencl11)
         .Cases("cl1.2", "CL1.2", LangStandard::lang_opencl12)
         .Cases("cl2.0", "CL2.0", LangStandard::lang_opencl20)
+        .Cases("cl2.1", "CL2.1", LangStandard::lang_opencl21)
+        .Cases("cl2.2", "CL2.2", LangStandard::lang_opencl22)
         .Cases("cl3.0", "CL3.0", LangStandard::lang_opencl30)
         .Cases("clc++", "CLC++", LangStandard::lang_openclcpp10)
         .Cases("clc++1.0", "CLC++1.0", LangStandard::lang_openclcpp10)
@@ -3674,6 +3774,36 @@ bool CompilerInvocation::ParseLangArgs(LangOptions &Opts, ArgList &Args,
     }
     else
       LangStd = OpenCLLangStd;
+  }
+
+  // open libfloor function info file
+  if (const Arg *A = Args.getLastArg(OPT_floor_function_info)) {
+    if (A->getValue() != nullptr && strlen(A->getValue()) > 0) {
+      Opts.floor_function_info = new std::fstream(A->getValue(), std::ios::out | std::ios::binary);
+      if (Opts.floor_function_info == nullptr ||
+          !Opts.floor_function_info->is_open()) {
+        Diags.Report(diag::err_drv_floor_function_info);
+      }
+    }
+  }
+
+  // extract libfloor image capabilities
+  if (const Arg *A = Args.getLastArg(OPT_floor_image_capabilities)) {
+    StringRef image_caps = A->getValue();
+    Opts.floor_image_capabilities = (unsigned int)std::stoul(image_caps.str());
+  }
+
+  // metal lang options
+  if (Args.hasArg(OPT_metal_no_array_image)) {
+    Opts.metal_no_array_image = true;
+  }
+  if (Args.hasArg(OPT_metal_soft_printf)) {
+    Opts.metal_soft_printf = true;
+  }
+
+  // Vulkan lang options
+  if (Args.hasArg(OPT_vulkan_soft_printf)) {
+    Opts.vulkan_soft_printf = true;
   }
 
   // These need to be parsed now. They are used to set OpenCL defaults.
@@ -3830,11 +3960,15 @@ bool CompilerInvocation::ParseLangArgs(LangOptions &Opts, ArgList &Args,
       Args.hasFlag(OPT_ftrigraphs, OPT_fno_trigraphs, Opts.Trigraphs);
 
   Opts.Blocks = Args.hasArg(OPT_fblocks) || (Opts.OpenCL
-    && Opts.OpenCLVersion == 200);
+    && Opts.OpenCLVersion >= 200);
 
+#if 0 // we don't want this
   Opts.ConvergentFunctions = Opts.OpenCL || (Opts.CUDA && Opts.CUDAIsDevice) ||
                              Opts.SYCLIsDevice ||
                              Args.hasArg(OPT_fconvergent_functions);
+#else
+  Opts.ConvergentFunctions = false;
+#endif
 
   Opts.NoBuiltin = Args.hasArg(OPT_fno_builtin) || Opts.Freestanding;
   if (!Opts.NoBuiltin)
@@ -3879,7 +4013,9 @@ bool CompilerInvocation::ParseLangArgs(LangOptions &Opts, ArgList &Args,
       Opts.OpenMPIsDevice &&
       Args.hasArg(options::OPT_fopenmp_target_new_runtime);
 
+#if 0 // we don't want this
   Opts.ConvergentFunctions = Opts.ConvergentFunctions || Opts.OpenMPIsDevice;
+#endif
 
   if (Opts.OpenMP || Opts.OpenMPSimd) {
     if (int Version = getLastArgIntValue(
@@ -3904,8 +4040,7 @@ bool CompilerInvocation::ParseLangArgs(LangOptions &Opts, ArgList &Args,
   // Set the flag to prevent the implementation from emitting device exception
   // handling code for those requiring so.
   if ((Opts.OpenMPIsDevice && (T.isNVPTX() || T.isAMDGCN())) ||
-      Opts.OpenCLCPlusPlus) {
-
+      Opts.OpenCL || Opts.CUDA || Opts.OpenCLCPlusPlus) {
     Opts.Exceptions = 0;
     Opts.CXXExceptions = 0;
   }
@@ -4020,6 +4155,19 @@ bool CompilerInvocation::ParseLangArgs(LangOptions &Opts, ArgList &Args,
     else
       Diags.Report(diag::err_drv_invalid_value) << A->getAsString(Args) << Val;
   }
+
+  Opts.CLVerifySPIR = Args.hasArg(OPT_cl_verify_spir);
+
+  if(const Arg* A = Args.getLastArg(OPT_cl_sampler_type)) {
+      Opts.CLSamplerOpaque  = llvm::StringSwitch<unsigned int>(A->getValue())
+        .Case("i32", 0u)
+        .Case("opaque", 1u)
+        .Default(~0u);
+      if(Opts.CLSamplerOpaque == ~0u)
+        Diags.Report(diag::err_drv_invalid_value) << A->getAsString(Args)
+                                                  << A->getValue();
+  } else
+    Opts.CLSamplerOpaque = 1;
 
   // Parse -fsanitize= arguments.
   parseSanitizerKinds("-fsanitize=", Args.getAllArgValues(OPT_fsanitize_EQ),
@@ -4136,6 +4284,11 @@ static bool isStrictlyPreprocessorAction(frontend::ActionKind Action) {
   case frontend::ASTView:
   case frontend::EmitAssembly:
   case frontend::EmitBC:
+  case frontend::EmitBC32:
+  case frontend::EmitBC50:
+  case frontend::EmitSPIRV:
+  case frontend::EmitSPIRVContainer:
+  case frontend::EmitMetalLib:
   case frontend::EmitHTML:
   case frontend::EmitLLVM:
   case frontend::EmitLLVMOnly:
@@ -4475,6 +4628,11 @@ bool CompilerInvocation::CreateFromArgsImpl(
     // triple used for host compilation.
     if (LangOpts.CUDAIsDevice)
       Res.getTargetOpts().HostTriple = Res.getFrontendOpts().AuxTriple;
+  }
+
+  if (LangOpts.Metal && Res.getCodeGenOpts().getDebugInfo() != codegenoptions::NoDebugInfo) {
+    // dwarf version must always be 4 for Metal 2.x
+    Res.getCodeGenOpts().DwarfVersion = 4;
   }
 
   // Set the triple of the host for OpenMP device compile.

@@ -286,6 +286,12 @@ public:
     ExtendTo64
   };
 
+  std::fstream* floor_function_info { nullptr };
+  unsigned int floor_image_capabilities { 0 };
+  bool metal_no_array_image { false };
+  bool metal_soft_printf { false };
+  bool vulkan_soft_printf { false };
+
 public:
   /// The used language standard.
   LangStandard::Kind LangStd;

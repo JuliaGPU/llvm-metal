@@ -669,8 +669,12 @@ CXCallingConv clang_getFunctionTypeCallingConv(CXType X) {
       TCALLINGCONV(SwiftAsync);
       TCALLINGCONV(PreserveMost);
       TCALLINGCONV(PreserveAll);
-    case CC_SpirFunction: return CXCallingConv_Unexposed;
-    case CC_OpenCLKernel: return CXCallingConv_Unexposed;
+    case CC_FloorKernel: return CXCallingConv_Unexposed;
+    case CC_FloorVertex: return CXCallingConv_Unexposed;
+    case CC_FloorFragment: return CXCallingConv_Unexposed;
+    case CC_FloorFunction: return CXCallingConv_Unexposed;
+    case CC_FloorTessControl: return CXCallingConv_Unexposed;
+    case CC_FloorTessEval: return CXCallingConv_Unexposed;
       break;
     }
 #undef TCALLINGCONV

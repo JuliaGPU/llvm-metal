@@ -56,7 +56,7 @@ public:
     typedef _Container container_type;
 
     _LIBCPP_INLINE_VISIBILITY _LIBCPP_CONSTEXPR_AFTER_CXX17 insert_iterator(_Container& __x, __insert_iterator_iter_t<_Container> __i)
-        : container(_VSTD::addressof(__x)), iter(__i) {}
+        : container(__builtin_addressof(__x)), iter(__i) {}
     _LIBCPP_INLINE_VISIBILITY _LIBCPP_CONSTEXPR_AFTER_CXX17 insert_iterator& operator=(const typename _Container::value_type& __value_)
         {iter = container->insert(iter, __value_); ++iter; return *this;}
 #ifndef _LIBCPP_CXX03_LANG

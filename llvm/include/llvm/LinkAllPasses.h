@@ -51,6 +51,7 @@
 #include "llvm/Transforms/Scalar/GVN.h"
 #include "llvm/Transforms/Scalar/InstSimplifyPass.h"
 #include "llvm/Transforms/Scalar/Scalarizer.h"
+#include "llvm/Transforms/LibFloor.h"
 #include "llvm/Transforms/Utils.h"
 #include "llvm/Transforms/Utils/SymbolRewriter.h"
 #include "llvm/Transforms/Utils/UnifyFunctionExitNodes.h"
@@ -118,7 +119,7 @@ namespace {
       (void) llvm::createInductiveRangeCheckEliminationPass();
       (void) llvm::createIndVarSimplifyPass();
       (void) llvm::createInstSimplifyLegacyPass();
-      (void) llvm::createInstructionCombiningPass();
+      (void) llvm::createInstructionCombiningPass(false);
       (void) llvm::createInternalizePass();
       (void) llvm::createLCSSAPass();
       (void) llvm::createLegacyDivergenceAnalysisPass();
@@ -213,7 +214,7 @@ namespace {
       (void) llvm::createLoopVectorizePass();
       (void) llvm::createSLPVectorizerPass();
       (void) llvm::createLoadStoreVectorizerPass();
-      (void) llvm::createVectorCombinePass();
+      (void) llvm::createVectorCombinePass(false);
       (void) llvm::createPartiallyInlineLibCallsPass();
       (void) llvm::createScalarizerPass();
       (void) llvm::createSeparateConstOffsetFromGEPPass();
@@ -246,6 +247,25 @@ namespace {
             llvm::AAMDNodes()); // for -print-alias-sets
       (void) llvm::AreStatisticsEnabled();
       (void) llvm::sys::RunningOnValgrind();
+
+      // LibFloor passes
+      (void) llvm::createEverythingInlinerPass();
+      (void) llvm::createAddressSpaceFixPass();
+      (void) llvm::createCUDAImagePass(0);
+      (void) llvm::createCUDAFinalPass();
+      (void) llvm::createMetalFirstPass(false, false);
+      (void) llvm::createMetalFinalPass(false, false);
+      (void) llvm::createMetalFinalModuleCleanupPass();
+      (void) llvm::createMetalImagePass(0);
+      (void) llvm::createSPIRFinalPass();
+      (void) llvm::createSPIRImagePass(0, false);
+      (void) llvm::createCFGStructurizationPass();
+      (void) llvm::createVulkanImagePass();
+      (void) llvm::createVulkanFinalPass();
+      (void) llvm::createVulkanPreFinalPass();
+      (void) llvm::createVulkanFinalModuleCleanupPass();
+      (void) llvm::createPropagateRangeInfoPass();
+      (void) llvm::createFMACombinerPass();
     }
   } ForcePassLinking; // Force link by creating a global definition.
 }

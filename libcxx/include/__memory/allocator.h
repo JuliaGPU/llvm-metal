@@ -129,11 +129,11 @@ public:
 
     _LIBCPP_DEPRECATED_IN_CXX17 _LIBCPP_INLINE_VISIBILITY
     pointer address(reference __x) const _NOEXCEPT {
-        return _VSTD::addressof(__x);
+        return __builtin_addressof(__x);
     }
     _LIBCPP_DEPRECATED_IN_CXX17 _LIBCPP_INLINE_VISIBILITY
     const_pointer address(const_reference __x) const _NOEXCEPT {
-        return _VSTD::addressof(__x);
+        return __builtin_addressof(__x);
     }
 
     _LIBCPP_NODISCARD_AFTER_CXX17 _LIBCPP_INLINE_VISIBILITY _LIBCPP_DEPRECATED_IN_CXX17
@@ -211,7 +211,7 @@ public:
 
     _LIBCPP_DEPRECATED_IN_CXX17 _LIBCPP_INLINE_VISIBILITY
     const_pointer address(const_reference __x) const _NOEXCEPT {
-        return _VSTD::addressof(__x);
+        return __builtin_addressof(__x);
     }
 
     _LIBCPP_NODISCARD_AFTER_CXX17 _LIBCPP_INLINE_VISIBILITY _LIBCPP_DEPRECATED_IN_CXX17
