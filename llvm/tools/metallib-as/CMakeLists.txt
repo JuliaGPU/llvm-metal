@@ -3,8 +3,8 @@ set(LLVM_LINK_COMPONENTS
   Support
   BitReader
   Target
-  MetalInfo
-  MetalCodeGen
+  AllTargetsInfos
+  AllTargetsCodeGens
   )
 
 add_llvm_tool(metallib-as
