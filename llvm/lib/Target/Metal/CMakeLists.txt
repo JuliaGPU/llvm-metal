@@ -19,6 +19,7 @@ add_llvm_target(MetalCodeGen
   Analysis
   InstCombine
   IPO
+  Passes
 
   ADD_TO_COMPONENT
   Metal

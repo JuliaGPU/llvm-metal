@@ -13,6 +13,9 @@
 #include "llvm/Bitcode/BitcodeWriter.h"
 #include "llvm/Pass.h"
 #include "llvm/Transforms/Utils/Cloning.h"
+#include "llvm/Transforms/IPO/Internalize.h"
+#include "llvm/Transforms/IPO/GlobalDCE.h"
+#include "llvm/Passes/PassBuilder.h"
 #include "llvm/Support/SHA256.h"
 
 #include <unordered_map>
@@ -268,26 +271,6 @@ struct metallib_program_info {
   vector<entry> entries;
 };
 
-//
-static bool is_used_in_function(const Function *F, const Value *V) {
-  for (const auto &user : V->users()) {
-    if (const auto instr = dyn_cast<Instruction>(user)) {
-      if (instr->getParent()->getParent() == F) {
-        return true;
-      }
-    } else if (const auto const_expr = dyn_cast<ConstantExpr>(user)) {
-      for (const auto &ce_user : const_expr->users()) {
-        if (const auto ce_instr = dyn_cast<Instruction>(ce_user)) {
-          if (ce_instr->getParent()->getParent() == F) {
-            return true;
-          }
-        }
-      }
-    }
-  }
-  return false;
-}
-
 // version -> { AIR version, language version }
 static const unordered_map<uint32_t,
                            pair<array<uint32_t, 3>, array<uint32_t, 3>>>
@@ -396,6 +379,11 @@ bool WriteMetalLibPass::runOnModule(Module &M) {
   ctrl.program_count = function_count;
   prog_info.entries.resize(function_count);
 
+  // set-up pass infrastructure
+  ModuleAnalysisManager MAM;
+  PassBuilder PB;
+  PB.registerModuleAnalyses(MAM);
+
   // create per-function modules and fill entries
   uint64_t entries_size = 0;
   uint64_t reflection_data_size = 0;
@@ -414,14 +402,23 @@ bool WriteMetalLibPass::runOnModule(Module &M) {
     entry.metal_language_version.minor = metal_version.second.second[1];
     entry.metal_language_version.rev = metal_version.second.second[2];
 
-    // clone the module with the current entry point function
-    // and any global values (variables, functions) that we need
-    ValueToValueMapTy VMap;
-    auto cloned_mod = CloneModule(M, VMap, [&func](const GlobalValue *GV) {
-      if (GV == func)
-        return true;
-      return is_used_in_function(func, GV);
-    });
+    // clone the module and remove everything but the current entry-point
+    auto cloned_mod = CloneModule(M);
+    ModulePassManager PM;
+    auto MustPreserveGV = [&func](const GlobalValue &GV) -> bool {
+      if (const Function *F = dyn_cast<Function>(&GV))
+        return F->getName() == func->getName();
+
+      GV.removeDeadConstantUsers();
+      return !GV.use_empty();
+    };
+    PM.addPass(InternalizePass(MustPreserveGV));
+    PM.addPass(GlobalDCEPass());
+    // global variables are only marked internal if they have no uses. that means we need
+    // to internalize+dce twice, once to get rid of functions, and once for global vars.
+    PM.addPass(InternalizePass(MustPreserveGV));
+    PM.addPass(GlobalDCEPass());
+    PM.run(*cloned_mod, MAM);
 
     // update data layout
     if (target_air_version >= 230) {
@@ -430,27 +427,6 @@ bool WriteMetalLibPass::runOnModule(Module &M) {
           "f64:64:64-v16:16:16-v24:32:32-v32:32:32-v48:64:64-v64:64:64-v96:128:"
           "128-v128:128:128-v192:256:256-v256:256:256-v512:512:512-v1024:1024:"
           "1024-n8:16:32");
-    }
-
-    // remove all unused functions and global vars, since CloneModule only sets
-    // unused vars to external linkage and unused funcs are declarations only
-    // NOTE: this also removes entry points that are now unused (metadata is
-    // removed later)
-    for (auto I = cloned_mod->begin(), E = cloned_mod->end(); I != E;) {
-      Function &F = *I++;
-      if (F.isDeclaration() && F.use_empty()) {
-        F.eraseFromParent();
-        continue;
-      }
-    }
-
-    for (auto I = cloned_mod->global_begin(), E = cloned_mod->global_end();
-         I != E;) {
-      GlobalVariable &GV = *I++;
-      if (GV.isDeclaration() && GV.use_empty()) {
-        GV.eraseFromParent();
-        continue;
-      }
     }
 
     // clean up metadata
