@@ -245,11 +245,6 @@ namespace {
 					I.eraseFromParent();
 					was_modified = true;
 					break;
-				case Intrinsic::memcpy:
-				case Intrinsic::memset:
-				case Intrinsic::memmove:
-					// pass
-					break;
 
 				// single arguments cases
 				case Intrinsic::abs: {
@@ -398,7 +393,7 @@ namespace {
 					was_modified = true;
 					break;
 				}
-#endif
+
 				case Intrinsic::vector_reduce_add:
 				case Intrinsic::vector_reduce_and:
 				case Intrinsic::vector_reduce_fadd:
@@ -412,10 +407,12 @@ namespace {
 				case Intrinsic::vector_reduce_umax:
 				case Intrinsic::vector_reduce_umin:
 				case Intrinsic::vector_reduce_xor:
-				default: {
-					ctx->emitError(&I, "unknown/unhandled intrinsic:\n" + print_instr(I));
+					ctx->emitError(&I, "unsupported vector intrinsic:\n" + print_instr(I));
+#endif
+
+				// by default, assume that the intrinsics will be supported
+				default:
 					break;
-				}
 			}
 		}
 
