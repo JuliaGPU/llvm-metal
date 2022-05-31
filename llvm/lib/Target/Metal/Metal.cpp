@@ -269,8 +269,8 @@ struct metallib_program_info {
 };
 
 //
-static bool is_used_in_function(const Function *F, const GlobalVariable *GV) {
-  for (const auto &user : GV->users()) {
+static bool is_used_in_function(const Function *F, const Value *V) {
+  for (const auto &user : V->users()) {
     if (const auto instr = dyn_cast<Instruction>(user)) {
       if (instr->getParent()->getParent() == F) {
         return true;
@@ -414,18 +414,13 @@ bool WriteMetalLibPass::runOnModule(Module &M) {
     entry.metal_language_version.minor = metal_version.second.second[1];
     entry.metal_language_version.rev = metal_version.second.second[2];
 
-    // clone the module with the current entry point function and any global
-    // vars that we need
+    // clone the module with the current entry point function
+    // and any global values (variables, functions) that we need
     ValueToValueMapTy VMap;
     auto cloned_mod = CloneModule(M, VMap, [&func](const GlobalValue *GV) {
-      if (GV == func) {
+      if (GV == func)
         return true;
-      }
-      // only clone global vars if they are needed in a specific function
-      if (const GlobalVariable *GVar = dyn_cast<GlobalVariable>(GV)) {
-        return is_used_in_function(func, GVar);
-      }
-      return false;
+      return is_used_in_function(func, GV);
     });
 
     // update data layout
