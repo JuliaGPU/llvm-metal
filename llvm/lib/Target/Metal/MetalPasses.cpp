@@ -177,6 +177,10 @@ namespace {
 		}
 
 		bool runOnFunction(Function &F) override {
+			func = &F;
+			M = F.getParent();
+			ctx = &M->getContext();
+
 			// exit if empty function
 			if(F.empty()) return false;
 
