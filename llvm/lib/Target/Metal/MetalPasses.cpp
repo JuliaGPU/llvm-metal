@@ -180,6 +180,7 @@ namespace {
 			func = &F;
 			M = F.getParent();
 			ctx = &M->getContext();
+			builder = std::make_shared<llvm::IRBuilder<>>(*ctx);
 
 			// exit if empty function
 			if(F.empty()) return false;
