@@ -247,6 +247,35 @@ namespace {
 					was_modified = true;
 					break;
 
+				case Intrinsic::copysign: {
+					auto op_arg0 = I.getOperand(0);
+					auto op_arg1 = I.getOperand(1);
+					builder->SetInsertPoint(&I);
+
+					assert(op_arg0->getType() == op_arg1->getType());
+					auto float_typ = op_arg0->getType();
+
+					// get bits
+					auto width = float_typ->getPrimitiveSizeInBits();
+					auto int_typ = IntegerType::get(*ctx, width);
+					auto int_arg0 = builder->CreateBitCast(op_arg0, int_typ);
+					auto int_arg1 = builder->CreateBitCast(op_arg1, int_typ);
+
+					// twiddle bits
+					auto sign =
+						builder->CreateAnd(int_arg1,
+					                       int_typ->getMask() & int_typ->getSignBit());
+					auto mantissa =
+						builder->CreateAnd(int_arg0,
+					                       int_typ->getMask() & ~int_typ->getSignBit());
+					auto new_value = builder->CreateOr(sign, mantissa);
+
+					I.replaceAllUsesWith(builder->CreateBitCast(new_value, float_typ));
+					I.eraseFromParent();
+					was_modified = true;
+					break;
+				}
+
 				// single arguments cases
 				case Intrinsic::abs: {
 					auto op_val = I.getOperand(0);
