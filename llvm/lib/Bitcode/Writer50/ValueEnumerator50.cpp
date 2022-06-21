@@ -915,7 +915,7 @@ void ValueEnumerator50::EnumerateAttributes(AttributeList PAL, LLVMContext& Cont
   }
 
   // Do lookups for all attribute groups.
-  for (unsigned i = PAL.index_begin(), e = PAL.index_end(); i != e; ++i) {
+  for (unsigned i : PAL.indexes()) {
     AttributeSet AS = PAL.getAttributes(i);
     if (!AS.hasAttributes())
       continue;
@@ -930,12 +930,18 @@ void ValueEnumerator50::EnumerateAttributes(AttributeList PAL, LLVMContext& Cont
       } else if (Attr.isStringAttribute()) {
         has_any_valid_attr = true;
         break;
+      } else if (Attr.isTypeAttribute()) {
+        if (Attr.getKindAsEnum() == Attribute::ByVal) {
+          has_any_valid_attr = true;
+          break;
+        }
+        // else: ignore all other type attributes
       }
-      // else: ignore type attributes
+      // else: ignore
     }
     auto AS_index = i;
     if (!has_any_valid_attr) {
-      AS_index = ~0u;
+      AS_index = invalid_attribute_group_id;
     }
 
     IndexAndAttrSet Pair = {AS_index, AS};

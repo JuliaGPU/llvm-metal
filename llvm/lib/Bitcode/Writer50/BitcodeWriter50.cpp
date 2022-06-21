@@ -11,6 +11,9 @@
 //
 //===----------------------------------------------------------------------===//
 
+// enable errors when using > 5.0 bitcode enums from LLVMBitCodes.h
+#define LLVM_BITCODE_50 1
+
 #include "llvm/Bitcode/BitcodeWriter.h"
 #include "ValueEnumerator50.h"
 #include "llvm/ADT/StringExtras.h"
@@ -28,7 +31,7 @@
 #include "llvm/IR/UseListOrder.h"
 #include "llvm/IR/ValueSymbolTable.h"
 #include "llvm/MC/StringTableBuilder.h"
-#include "llvm/Support/TargetRegistry.h"
+#include "llvm/MC/TargetRegistry.h"
 #include "llvm/Object/IRSymtab.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/MathExtras.h"
@@ -146,6 +149,22 @@ public:
         VE(*M, ShouldPreserveUseListOrder), Index(Index),
         GenerateHash(GenerateHash), ModHash(ModHash),
         BitcodeStartBit(Stream.GetCurrentBitNo()) {
+    // imitate Metal by having one llvm.dbg.cu entry per DISubprogram
+    if (auto dbg_cu = M->getNamedMetadata("llvm.dbg.cu"); dbg_cu) {
+      uint32_t subprogram_count = 0;
+      for (const auto &md : VE.getMetadataMap()) {
+        if (const DISubprogram *disubprog_node = dyn_cast_or_null<DISubprogram>(md.first); disubprog_node) {
+          ++subprogram_count;
+        }
+      }
+      if (subprogram_count > 1 && dbg_cu->getNumOperands() == 1) {
+        auto dup_op = dbg_cu->getOperand(0);
+        for (uint32_t i = 1; i < subprogram_count; ++i) {
+          dbg_cu->addOperand(dup_op);
+        }
+      }
+    }
+
     // Assign ValueIds to any callee values in the index that came from
     // indirect call profiles and were recorded as a GUID not a Value*
     // (which would have been assigned an ID by the ValueEnumerator50).
@@ -629,7 +648,7 @@ void ModuleBitcodeWriter50::writeAttributeGroupTable() {
 
   SmallVector<uint64_t, 64> Record;
   for (ValueEnumerator50::IndexAndAttrSet Pair : AttrGrps) {
-    if (Pair.first == ~0u) {
+    if (Pair.first == ValueEnumerator50::invalid_attribute_group_id) {
       // this complete set/group can't be encoded for 5.0
       continue;
     }
@@ -651,7 +670,7 @@ void ModuleBitcodeWriter50::writeAttributeGroupTable() {
             Record.push_back(enc_attr);
             Record.push_back(Attr.getValueAsInt());
           }
-		}
+        }
       } else if (Attr.isStringAttribute()) {
         StringRef Kind = Attr.getKindAsString();
         StringRef Val = Attr.getValueAsString();
@@ -665,7 +684,13 @@ void ModuleBitcodeWriter50::writeAttributeGroupTable() {
         }
       } else {
         assert(Attr.isTypeAttribute());
-        // ignore this
+        // NOTE: we do want to encode the "byval" attribute (in the 5.0 format -> no type)
+        if (Attr.getKindAsEnum() == Attribute::ByVal) {
+          const auto enc_attr = getAttrKindEncodingBC50(Attr.getKindAsEnum());
+          Record.push_back(0);
+          Record.push_back(enc_attr);
+        }
+        // else: ignore this
       }
     }
 
@@ -685,7 +710,7 @@ void ModuleBitcodeWriter50::writeAttributeTable() {
   SmallVector<uint64_t, 64> Record;
   for (unsigned i = 0, e = Attrs.size(); i != e; ++i) {
     AttributeList AL = Attrs[i];
-    for (unsigned i = AL.index_begin(), e = AL.index_end(); i != e; ++i) {
+    for (unsigned i : AL.indexes()) {
       AttributeSet AS = AL.getAttributes(i);
       if (AS.hasAttributes())
         if (const auto group_id = VE.getAttributeGroupID({i, AS}); group_id != ~0u)
@@ -1379,8 +1404,11 @@ void ModuleBitcodeWriter50::writeDISubrange(const DISubrange *N,
                                             SmallVectorImpl<uint64_t> &Record,
                                             unsigned Abbrev) {
   Record.push_back(N->isDistinct());
-  const auto CI = N->getCount().get<ConstantInt *>();
-  const auto LBMD = dyn_cast<ConstantAsMetadata>(N->getRawLowerBound());
+  ConstantInt *CI = nullptr;
+  if (auto cnt = N->getCount(); cnt) {
+    CI = cnt.get<ConstantInt *>();
+  }
+  const auto LBMD = dyn_cast_or_null<ConstantAsMetadata>(N->getRawLowerBound());
   if (CI && LBMD) {
     Record.push_back(CI->getSExtValue());
     const auto LB = cast<ConstantInt>(LBMD->getValue());
@@ -1553,7 +1581,6 @@ void ModuleBitcodeWriter50::writeDISubprogram(const DISubprogram *N,
   Record.push_back(VE.getMetadataOrNullID(N->getRawUnit()));
   Record.push_back(VE.getMetadataOrNullID(N->getTemplateParams().get()));
   Record.push_back(VE.getMetadataOrNullID(N->getDeclaration()));
-  // TODO: ? old: Record.push_back(VE.getMetadataOrNullID(N->getVariables().get()));
   Record.push_back(VE.getMetadataOrNullID(N->getRetainedNodes().get()));
   Record.push_back(N->getThisAdjustment());
   Record.push_back(VE.getMetadataOrNullID(N->getThrownTypes().get()));
@@ -1729,7 +1756,7 @@ void ModuleBitcodeWriter50::writeDIGlobalVariableExpression(
   Record.push_back(N->isDistinct());
   Record.push_back(VE.getMetadataOrNullID(N->getVariable()));
   Record.push_back(VE.getMetadataOrNullID(N->getExpression()));
-
+  
   Stream.EmitRecord(bitc::METADATA_GLOBAL_VAR_EXPR, Record, Abbrev);
   Record.clear();
 }
@@ -2468,7 +2495,7 @@ void ModuleBitcodeWriter50::writeInstruction(const Instruction &I,
     break;
 
   case Instruction::FNeg: {
-	// emit as "fsub -0, value"
+    // emit as "fsub -0, value"
     Code = bitc::FUNC_CODE_INST_BINOP;
     pushValue(ConstantFP::get(I.getOperand(0)->getType(), -0.0), InstID, Vals);
     if (!pushValueAndType(I.getOperand(0), InstID, Vals))
@@ -2836,7 +2863,7 @@ void ModuleBitcodeWriter50::writeInstruction(const Instruction &I,
     // freeze instruction is not supported by LLVM 5.0,
     // but we can more or less emulate it as an identity function
     // -> encode as a bitcast to the same type
-	auto Operand = I.getOperand(0);
+    auto Operand = I.getOperand(0);
     Code = bitc::FUNC_CODE_INST_CAST;
     if (!pushValueAndType(Operand, InstID, Vals))
       AbbrevToUse = FUNCTION_INST_CAST_ABBREV;
@@ -3504,7 +3531,7 @@ void ModuleBitcodeWriter50::writePerModuleGlobalValueSummary() {
     writeModuleLevelReferences(G, NameVals, FSModRefsAbbrev);
 
   for (const GlobalAlias &A : M.aliases()) {
-    auto *Aliasee = A.getBaseObject();
+    auto *Aliasee = A.getAliaseeObject();
     if (!Aliasee->hasName())
       // Nameless function don't have an entry in the summary, skip it.
       continue;

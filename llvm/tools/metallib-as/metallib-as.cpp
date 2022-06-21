@@ -10,9 +10,10 @@
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Host.h"
 #include "llvm/Support/InitLLVM.h"
-#include "llvm/Support/TargetRegistry.h"
+#include "llvm/MC/TargetRegistry.h"
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/ToolOutputFile.h"
+#include "llvm/Support/WithColor.h"
 #include "llvm/Target/TargetMachine.h"
 
 using namespace llvm;
@@ -29,15 +30,14 @@ static cl::opt<std::string>
 static cl::opt<bool> NoVerify("disable-verify", cl::Hidden,
                               cl::desc("Do not verify input module"));
 
-LLVM_ATTRIBUTE_NORETURN static void reportError(Twine Msg,
-                                                StringRef Filename = "") {
+[[noreturn]] static void reportError(Twine Msg, StringRef Filename = "") {
   SmallString<256> Prefix;
   if (!Filename.empty()) {
     if (Filename == "-")
       Filename = "<stdin>";
     ("'" + Twine(Filename) + "': ").toStringRef(Prefix);
   }
-  WithColor::error(errs(), "llc") << Prefix << Msg << "\n";
+  WithColor::error(errs(), "metallib-as") << Prefix << Msg << "\n";
   exit(1);
 }
 

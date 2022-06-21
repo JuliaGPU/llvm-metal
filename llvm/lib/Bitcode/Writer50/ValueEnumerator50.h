@@ -143,6 +143,9 @@ private:
 public:
   ValueEnumerator50(const Module &M, bool ShouldPreserveUseListOrder);
 
+  //! signals that an attribute group id is invalid / should not be used
+  static constexpr const uint32_t invalid_attribute_group_id = 0x7FFF'FFFFu;
+
   void dump() const;
   void print(raw_ostream &OS, const ValueMapType &Map, const char *Name) const;
   void print(raw_ostream &OS, const MetadataMapType &Map,
@@ -183,7 +186,7 @@ public:
     AttributeGroupMapType::const_iterator I = AttributeGroupMap.find(Group);
     //assert(I != AttributeGroupMap.end() && "Attribute not in ValueEnumerator50!");
     if (I == AttributeGroupMap.end()) {
-      return ~0u;
+      return invalid_attribute_group_id;
     }
     return I->second;
   }
@@ -208,6 +211,13 @@ public:
   /// Get the non-MDString metadata for this block.
   ArrayRef<const Metadata *> getNonMDStrings() const {
     return makeArrayRef(MDs).slice(NumModuleMDs).slice(NumMDStrings);
+  }
+
+  ArrayRef<const Metadata *> getMDs() const {
+    return makeArrayRef(MDs);
+  }
+  const MetadataMapType& getMetadataMap() const {
+    return MetadataMap;
   }
 
   const TypeList &getTypes() const { return Types; }
