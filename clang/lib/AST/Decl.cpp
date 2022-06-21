@@ -2347,10 +2347,12 @@ void VarDecl::setInit(Expr *I) {
 bool VarDecl::mightBeUsableInConstantExpressions(const ASTContext &C) const {
   const LangOptions &Lang = C.getLangOpts();
 
+#if 0 // we don't want this
   // OpenCL permits const integral variables to be used in constant
   // expressions, like in C++98.
   if (!Lang.CPlusPlus && !Lang.OpenCL)
     return false;
+#endif
 
   // Function parameters are never usable in constant expressions.
   if (isa<ParmVarDecl>(this))
@@ -3224,7 +3226,7 @@ bool FunctionDecl::isExternC() const {
 }
 
 bool FunctionDecl::isInExternCContext() const {
-  if (hasAttr<OpenCLKernelAttr>())
+  if (hasAttr<ComputeKernelAttr>())
     return true;
   return getLexicalDeclContext()->isExternCContext();
 }

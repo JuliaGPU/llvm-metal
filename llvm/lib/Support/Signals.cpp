@@ -83,12 +83,15 @@ struct CallbackAndCookie {
   std::atomic<Status> Flag;
 };
 static constexpr size_t MaxSignalHandlerCallbacks = 8;
-static CallbackAndCookie CallBacksToRun[MaxSignalHandlerCallbacks];
+static CallbackAndCookie& getCallBacksToRun(size_t idx) {
+  static CallbackAndCookie CallBacksToRun[MaxSignalHandlerCallbacks];
+  return CallBacksToRun[idx];
+}
 
 // Signal-safe.
 void sys::RunSignalHandlers() {
   for (size_t I = 0; I < MaxSignalHandlerCallbacks; ++I) {
-    auto &RunMe = CallBacksToRun[I];
+    auto &RunMe = getCallBacksToRun(I);
     auto Expected = CallbackAndCookie::Status::Initialized;
     auto Desired = CallbackAndCookie::Status::Executing;
     if (!RunMe.Flag.compare_exchange_strong(Expected, Desired))
@@ -104,7 +107,7 @@ void sys::RunSignalHandlers() {
 static void insertSignalHandler(sys::SignalHandlerCallback FnPtr,
                                 void *Cookie) {
   for (size_t I = 0; I < MaxSignalHandlerCallbacks; ++I) {
-    auto &SetMe = CallBacksToRun[I];
+    auto &SetMe = getCallBacksToRun(I);
     auto Expected = CallbackAndCookie::Status::Empty;
     auto Desired = CallbackAndCookie::Status::Initializing;
     if (!SetMe.Flag.compare_exchange_strong(Expected, Desired))

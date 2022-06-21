@@ -2501,7 +2501,7 @@ bool Preprocessor::ReadMacroParameterList(MacroInfo *MI, Token &Tok) {
              diag::ext_variadic_macro);
 
       // OpenCL v1.2 s6.9.e: variadic macros are not supported.
-      if (LangOpts.OpenCL && !LangOpts.OpenCLCPlusPlus) {
+      if (LangOpts.OpenCL && !LangOpts.OpenCLCPlusPlus && !LangOpts.CPlusPlus) {
         Diag(Tok, diag::ext_pp_opencl_variadic_macros);
       }
 

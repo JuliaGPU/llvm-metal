@@ -41,20 +41,6 @@ set(files
   bmi2intrin.h
   bmiintrin.h
   builtins.h
-  __clang_cuda_builtin_vars.h
-  __clang_cuda_math.h
-  __clang_cuda_cmath.h
-  __clang_cuda_complex_builtins.h
-  __clang_cuda_device_functions.h
-  __clang_cuda_intrinsics.h
-  __clang_cuda_texture_intrinsics.h
-  __clang_cuda_libdevice_declares.h
-  __clang_cuda_math_forward_declares.h
-  __clang_cuda_runtime_wrapper.h
-  __clang_hip_libdevice_declares.h
-  __clang_hip_cmath.h
-  __clang_hip_math.h
-  __clang_hip_runtime_wrapper.h
   cetintrin.h
   cet.h
   cldemoteintrin.h
@@ -96,8 +82,6 @@ set(files
   msa.h
   mwaitxintrin.h
   nmmintrin.h
-  opencl-c.h
-  opencl-c-base.h
   pkuintrin.h
   pmmintrin.h
   pconfigintrin.h
@@ -147,12 +131,6 @@ set(files
   xtestintrin.h
   )
 
-set(cuda_wrapper_files
-  cuda_wrappers/algorithm
-  cuda_wrappers/complex
-  cuda_wrappers/new
-)
-
 set(ppc_wrapper_files
   ppc_wrappers/mmintrin.h
   ppc_wrappers/xmmintrin.h
@@ -201,7 +179,7 @@ endfunction(clang_generate_header)
 
 
 # Copy header files from the source directory to the build directory
-foreach( f ${files} ${cuda_wrapper_files} ${ppc_wrapper_files} ${openmp_wrapper_files})
+foreach( f ${files} ${ppc_wrapper_files} ${openmp_wrapper_files})
   copy_header_to_output_dir(${CMAKE_CURRENT_SOURCE_DIR} ${f})
 endforeach( f )
 
@@ -231,11 +209,6 @@ set(header_install_dir lib${LLVM_LIBDIR_SUFFIX}/clang/${CLANG_VERSION}/include)
 install(
   FILES ${files} ${generated_files}
   DESTINATION ${header_install_dir}
-  COMPONENT clang-resource-headers)
-
-install(
-  FILES ${cuda_wrapper_files}
-  DESTINATION ${header_install_dir}/cuda_wrappers
   COMPONENT clang-resource-headers)
 
 install(

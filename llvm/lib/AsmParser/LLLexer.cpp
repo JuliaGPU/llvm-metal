@@ -600,8 +600,12 @@ lltok::Kind LLLexer::LexIdentifier() {
   KEYWORD(avr_signalcc);
   KEYWORD(ptx_kernel);
   KEYWORD(ptx_device);
-  KEYWORD(spir_kernel);
-  KEYWORD(spir_func);
+  KEYWORD(floor_kernel);
+  KEYWORD(floor_vertex);
+  KEYWORD(floor_fragment);
+  KEYWORD(floor_tessellation_control);
+  KEYWORD(floor_tessellation_evaluation);
+  KEYWORD(floor_func);
   KEYWORD(intel_ocl_bicc);
   KEYWORD(x86_64_sysvcc);
   KEYWORD(win64cc);

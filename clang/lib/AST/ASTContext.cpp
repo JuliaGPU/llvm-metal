@@ -80,6 +80,7 @@
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/Triple.h"
+#include "llvm/IR/DataLayout.h"
 #include "llvm/Support/Capacity.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/Compiler.h"
@@ -937,8 +938,9 @@ static const LangASMap *getAddressSpaceMap(const TargetInfo &T,
         2,  // opencl_constant
         0,  // opencl_private
         4,  // opencl_generic
-        5,  // opencl_global_device
-        6,  // opencl_global_host
+        100,  // opencl_global_device
+        101,  // opencl_global_host
+        0,  // vulkan_input
         7,  // cuda_device
         8,  // cuda_constant
         9,  // cuda_shared
@@ -1433,6 +1435,7 @@ void ASTContext::InitBuiltinTypes(const TargetInfo &Target,
     InitBuiltinType(OCLClkEventTy, BuiltinType::OCLClkEvent);
     InitBuiltinType(OCLQueueTy, BuiltinType::OCLQueue);
     InitBuiltinType(OCLReserveIDTy, BuiltinType::OCLReserveID);
+    InitBuiltinType(OCLPatchControlPointTy, BuiltinType::OCLPatchControlPoint);
 
 #define EXT_OPAQUE_TYPE(ExtType, Id, Ext) \
     InitBuiltinType(Id##Ty, BuiltinType::Id);
@@ -2176,11 +2179,23 @@ TypeInfo ASTContext::getTypeInfoImpl(const Type *T) const {
       Width = Target->getPointerWidth(0);
       Align = Target->getPointerAlign(0);
       break;
-    case BuiltinType::OCLSampler:
+    case BuiltinType::OCLSampler: {
+      // NOTE: samplers are modeled as integers for now.
+      Width = Target->getIntWidth();
+      Align = Target->getIntAlign();
+#if 0 // -> use this when treating samplers as pointers
+      AS = getTargetAddressSpace(
+          Target->getOpenCLTypeAddrSpace(getOpenCLTypeKind(T)));
+      Width = Target->getPointerWidth(AS);
+      Align = Target->getPointerAlign(AS);
+#endif
+      break;
+    }
     case BuiltinType::OCLEvent:
     case BuiltinType::OCLClkEvent:
     case BuiltinType::OCLQueue:
     case BuiltinType::OCLReserveID:
+    case BuiltinType::OCLPatchControlPoint:
 #define IMAGE_TYPE(ImgType, Id, SingletonId, Access, Suffix) \
     case BuiltinType::Id:
 #include "clang/Basic/OpenCLImageTypes.def"
@@ -3012,8 +3027,14 @@ QualType ASTContext::getAddrSpaceQualType(QualType T,
 
   // If this type already has an address space specified, it cannot get
   // another one.
-  assert(!Quals.hasAddressSpace() &&
-         "Type cannot be in multiple addr spaces!");
+  if (Quals.hasAddressSpace()) {
+    if (Quals.getAddressSpace() == LangAS::opencl_private) {
+      Quals.removeAddressSpace(); // private can be replaced
+    } else {
+      assert(!Quals.hasAddressSpace() &&
+             "Type cannot be in multiple addr spaces!");
+    }
+  }
   Quals.addAddressSpace(AddressSpace);
 
   return getExtQualType(TypeNode, Quals);
@@ -6831,6 +6852,9 @@ OpenCLTypeKind ASTContext::getOpenCLTypeKind(const Type *T) const {
   case BuiltinType::OCLSampler:
     return OCLTK_Sampler;
 
+  case BuiltinType::OCLPatchControlPoint:
+    return OCLTK_PatchControlPoint;
+
   default:
     return OCLTK_Default;
   }
@@ -7408,6 +7432,7 @@ static char getObjCEncodingForPrimitiveType(const ASTContext *C,
     case BuiltinType::OCLQueue:
     case BuiltinType::OCLReserveID:
     case BuiltinType::OCLSampler:
+    case BuiltinType::OCLPatchControlPoint:
     case BuiltinType::Dependent:
 #define PPC_VECTOR_TYPE(Name, Id, Size) \
     case BuiltinType::Id:
@@ -9612,13 +9637,30 @@ QualType ASTContext::mergeFunctionTypes(QualType lhs, QualType rhs,
     assert((AllowCXX ||
             (!lproto->hasExceptionSpec() && !rproto->hasExceptionSpec())) &&
            "C++ shouldn't be here");
-    // Compatible functions must have the same number of parameters
-    if (lproto->getNumParams() != rproto->getNumParams())
-      return {};
 
-    // Variadic and non-variadic functions aren't compatible
-    if (lproto->isVariadic() != rproto->isVariadic())
-      return {};
+    auto lproto_nargs = lproto->getNumParams();
+    auto rproto_nargs = rproto->getNumParams();
+
+    if (LangOpts.OpenCLVersion < 200 || !lproto->isVariadic()) {
+      // Compatible functions must have the same number of parameters
+      if (lproto_nargs != rproto_nargs)
+        return {};
+
+      // Variadic and non-variadic functions aren't compatible
+      if (lproto->isVariadic() != rproto->isVariadic())
+        return {};
+    } else {
+      if (!lproto->isVariadic() && !lproto->isVariadic()) {
+        if (lproto_nargs != rproto_nargs)
+          return QualType();
+      } else if (lproto->isVariadic()) {
+        if (lproto_nargs > rproto_nargs)
+          return QualType();
+      } else if (rproto->isVariadic()) {
+        if (lproto_nargs < rproto_nargs)
+          return QualType();
+      }
+    }
 
     if (lproto->getMethodQuals() != rproto->getMethodQuals())
       return {};
@@ -10826,7 +10868,7 @@ static GVALinkage basicGVALinkageForFunction(const ASTContext &Context,
   if (!FD->isInlined())
     return External;
 
-  if ((!Context.getLangOpts().CPlusPlus &&
+  if ((!Context.getLangOpts().CPlusPlus && !Context.getLangOpts().OpenCL &&
        !Context.getTargetInfo().getCXXABI().isMicrosoft() &&
        !FD->hasAttr<DLLExportAttr>()) ||
       FD->hasAttr<GNUInlineAttr>()) {
@@ -10863,7 +10905,7 @@ static GVALinkage adjustGVALinkageForAttributes(const ASTContext &Context,
   } else if (Context.getLangOpts().CUDA && Context.getLangOpts().CUDAIsDevice) {
     // Device-side functions with __global__ attribute must always be
     // visible externally so they can be launched from host.
-    if (D->hasAttr<CUDAGlobalAttr>() &&
+    if (D->hasAttr<ComputeKernelAttr>() &&
         (L == GVA_DiscardableODR || L == GVA_Internal))
       return GVA_StrongODR;
     // Single source offloading languages like CUDA/HIP need to be able to
@@ -11804,4 +11846,258 @@ StringRef ASTContext::getCUIDHash() const {
     return StringRef();
   CUIDHash = llvm::utohexstr(llvm::MD5Hash(LangOpts.CUID), /*LowerCase=*/true);
   return CUIDHash;
+}
+
+//
+static std::string aggregate_scalar_fields_mangle(const CXXRecordDecl* root_decl,
+												  MangleContext* MC,
+												  RecordDecl::field_iterator field_iter) {
+	std::string gen_type_name = "";
+	llvm::raw_string_ostream gen_type_name_stream(gen_type_name);
+	if (MC) {
+		MC->mangleMetalFieldName(*field_iter, root_decl, gen_type_name_stream);
+	} else {
+		gen_type_name_stream << field_iter->getName();
+	}
+	return "generated(" + gen_type_name_stream.str() + ")";
+}
+static std::string aggregate_scalar_fields_mangle(const CXXRecordDecl* root_decl,
+												  MangleContext* MC,
+												  const std::string& name,
+												  const clang::QualType type) {
+	std::string gen_type_name = "";
+	llvm::raw_string_ostream gen_type_name_stream(gen_type_name);
+	if (MC) {
+		MC->mangleMetalGeneric(name, type, root_decl, gen_type_name_stream);
+	} else {
+		gen_type_name_stream << name;
+	}
+	return "generated(" + gen_type_name_stream.str() + ")";
+}
+
+clang::QualType ASTContext::get_compat_vector_type(const CXXRecordDecl* decl) const {
+	const auto fields = get_aggregate_scalar_fields(decl, decl, nullptr, true, false, true);
+	
+	const auto vec_size = fields.size();
+	if (vec_size < 1 || vec_size > 4) {
+		assert(false && "invalid vector size (must be >= 1 && <= 4)");
+		return VoidTy;
+	}
+	
+	const auto elem_type = fields[0].type.getUnqualifiedType();
+	for (size_t i = 1; i < vec_size; ++i) {
+		if (fields[i].type.getUnqualifiedType() != elem_type) {
+			assert(false && "all vector-compat element types must be equal");
+			return VoidTy;
+		}
+	}
+	
+	return getExtVectorType(elem_type, vec_size);
+}
+
+void ASTContext::aggregate_scalar_fields_add_array(const CXXRecordDecl* root_decl,
+												   const CXXRecordDecl* parent_decl,
+												   const ConstantArrayType* CAT,
+												   const AttrVec* attrs,
+												   const FieldDecl* parent_field_decl,
+												   const std::string& name,
+												   const bool expand_array_image,
+												   MangleContext* MC,
+												   std::vector<ASTContext::aggregate_scalar_entry>& ret) const {
+	if (expand_array_image ||
+		!(CAT->getElementType()->isAggregateImageType() ||
+		  CAT->getElementType()->isImageType())) {
+		const auto count = CAT->getSize().getZExtValue();
+		const auto ET = CAT->getElementType();
+		if (const auto arr_rdecl = ET->getAsCXXRecordDecl()) {
+			auto contained_ret = get_aggregate_scalar_fields(root_decl, arr_rdecl, MC, false, false, expand_array_image);
+			for (auto& entry : contained_ret) {
+				entry.parents.push_back(parent_decl);
+			}
+			for (uint64_t i = 0; i < count; ++i) {
+				ret.insert(ret.end(), contained_ret.begin(), contained_ret.end());
+			}
+		} else if(ET->isArrayType()) {
+			const auto aoa_decl = dyn_cast<ConstantArrayType>(ET->getAsArrayTypeUnsafe());
+			assert(aoa_decl && "array type must be a constant array");
+			for (uint64_t i = 0; i < count; ++i) {
+				const auto idx_str = "_" + std::to_string(i);
+				aggregate_scalar_fields_add_array(root_decl, parent_decl, aoa_decl, attrs, parent_field_decl,
+												  name + idx_str, expand_array_image, MC, ret);
+			}
+		} else {
+			for (uint64_t i = 0; i < count; ++i) {
+				const auto idx_str = "_" + std::to_string(i);
+				ret.push_back(aggregate_scalar_entry {
+					ET,
+					name + idx_str,
+					aggregate_scalar_fields_mangle(root_decl, MC, name + idx_str, ET),
+					attrs,
+					parent_field_decl,
+					{ parent_decl },
+					false,
+					false
+				});
+			}
+		}
+	} else {
+		// directly add an array entry
+		ret.push_back(aggregate_scalar_entry {
+			clang::QualType(CAT, 0),
+			name,
+			aggregate_scalar_fields_mangle(root_decl, MC, name, clang::QualType(CAT, 0)),
+			attrs,
+			parent_field_decl,
+			{ parent_decl },
+			false,
+			false
+		});
+	}
+}
+
+std::vector<ASTContext::aggregate_scalar_entry>
+ASTContext::get_aggregate_scalar_fields(const CXXRecordDecl* root_decl,
+										const CXXRecordDecl* decl,
+										MangleContext* MC,
+										const bool ignore_root_vec_compat,
+										const bool ignore_bases,
+										const bool expand_array_image) const {
+	if (decl == nullptr) return {};
+	
+	// must have definition
+	if (!decl->hasDefinition()) return {};
+	
+	// if the root decl is a direct compat vector, return it directly
+	if (!ignore_root_vec_compat &&
+		decl->hasAttr<VectorCompatAttr>()) {
+		return {
+			aggregate_scalar_entry {
+				get_compat_vector_type(decl),
+				"",
+				"",
+				&decl->getAttrs(),
+				nullptr,
+				{},
+				true,
+				false
+			}
+		};
+	}
+	
+	//
+	std::vector<aggregate_scalar_entry> ret;
+	
+	// iterate over / recurse into all bases
+	if (!ignore_bases) {
+		for (const auto& base : decl->bases()) {
+			auto base_ret = get_aggregate_scalar_fields(root_decl, base.getType()->getAsCXXRecordDecl(), MC,
+														false, false, expand_array_image);
+			for (auto& elem : base_ret) {
+				elem.is_in_base = true;
+			}
+			if (!base_ret.empty()) {
+				ret.insert(ret.end(), base_ret.begin(), base_ret.end());
+			}
+		}
+	}
+	
+	// TODO/NOTE: make sure attrs are correctly forwarded/inherited/passed-through
+	const auto add_field = [this, &root_decl, &decl, &expand_array_image, &ret, &MC](RecordDecl::field_iterator field_iter) {
+		if (const auto rdecl = field_iter->getType()->getAsCXXRecordDecl()) {
+			if (rdecl->hasAttr<VectorCompatAttr>() ||
+			   field_iter->hasAttr<GraphicsVertexPositionAttr>()) {
+				const auto vec_type = get_compat_vector_type(rdecl);
+				
+				if (field_iter->hasAttr<GraphicsVertexPositionAttr>()) {
+					const auto as_vec_type = vec_type->getAs<ExtVectorType>();
+					assert(as_vec_type->getNumElements() == 4 &&
+						   as_vec_type->getElementType()->isFloatingType() &&
+						   "invalid vertex position - must be float4");
+				}
+				
+				ret.push_back(aggregate_scalar_entry {
+					vec_type,
+					field_iter->getName().str(),
+					aggregate_scalar_fields_mangle(root_decl, MC, field_iter->getName().str(), vec_type),
+					field_iter->hasAttrs() ? &field_iter->getAttrs() : nullptr,
+					*field_iter,
+					{ decl },
+					true,
+					false
+				});
+			} else {
+				auto contained_ret = get_aggregate_scalar_fields(root_decl, rdecl, MC,
+																 false, false, expand_array_image);
+				for (auto& entry : contained_ret) {
+					entry.parents.push_back(decl);
+				}
+				if (!contained_ret.empty()) {
+					ret.insert(ret.end(), contained_ret.begin(), contained_ret.end());
+				}
+			}
+		} else if (field_iter->getType()->isArrayType()) {
+			const auto arr_decl = dyn_cast<ConstantArrayType>(field_iter->getType()->getAsArrayTypeUnsafe());
+			assert(arr_decl && "array type must be a constant array");
+			aggregate_scalar_fields_add_array(root_decl, decl, arr_decl,
+											  field_iter->hasAttrs() ? &field_iter->getAttrs() : nullptr,
+											  *field_iter, field_iter->getName().str(), expand_array_image, MC, ret);
+		} else {
+			ret.push_back(aggregate_scalar_entry {
+				field_iter->getType(),
+				field_iter->getName().str(),
+				aggregate_scalar_fields_mangle(root_decl, MC, field_iter),
+				field_iter->hasAttrs() ? &field_iter->getAttrs() : nullptr,
+				*field_iter,
+				{ decl },
+				false,
+				false
+			});
+		}
+	};
+	
+	if (!decl->isUnion()) {
+		// iterate over all fields/members
+		for (auto iter = decl->field_begin(); iter != decl->field_end(); ++iter) {
+			add_field(iter);
+		}
+	} else {
+		// for unions: only use the first field
+		add_field(decl->field_begin());
+	}
+	
+	return ret;
+}
+
+static FieldDecl *addFieldToRecordDecl(ASTContext &C, DeclContext *DC,
+                                       QualType FieldTy) {
+  auto *Field = FieldDecl::Create(
+      C, DC, SourceLocation(), SourceLocation(), /*Id=*/nullptr, FieldTy,
+      C.getTrivialTypeSourceInfo(FieldTy, SourceLocation()),
+      /*BW=*/nullptr, /*Mutable=*/false, /*InitStyle=*/ICIS_NoInit);
+  Field->setAccess(AS_public);
+  DC->addDecl(Field);
+  return Field;
+}
+
+clang::QualType ASTContext::get_unnamed_expanded_graphics_io_type(const QualType& type, const bool create_packed) {
+	const auto cxx_rdecl = type->getAsCXXRecordDecl();
+	
+	// if the top decl already is a compat vector, return it directly
+	if (cxx_rdecl->hasAttr<VectorCompatAttr>()) {
+		return get_compat_vector_type(cxx_rdecl);
+	}
+	
+	// else: extract all fields and create a flat anonymous struct from them
+	auto ret = buildImplicitRecord("__libfloor_flat_" + cxx_rdecl->getName().str());
+	ret->startDefinition();
+	if (create_packed) {
+		ret->addAttr(PackedAttr::CreateImplicit(*this));
+	}
+	const auto fields = get_aggregate_scalar_fields(cxx_rdecl, cxx_rdecl);
+	for (const auto& field : fields) {
+		addFieldToRecordDecl(*this, ret, field.type);
+	}
+	ret->completeDefinition();
+	
+	return QualType(ret->getTypeForDecl(), 0u);
 }

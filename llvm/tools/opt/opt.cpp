@@ -537,6 +537,7 @@ int main(int argc, char **argv) {
   initializeCore(Registry);
   initializeCoroutines(Registry);
   initializeScalarOpts(Registry);
+  initializeLibFloor(Registry);
   initializeObjCARCOpts(Registry);
   initializeVectorization(Registry);
   initializeIPO(Registry);
@@ -569,6 +570,7 @@ int main(int argc, char **argv) {
   initializeExpandVectorPredicationPass(Registry);
   initializeWasmEHPreparePass(Registry);
   initializeWriteBitcodePassPass(Registry);
+  initializeWriteBitcodePass50Pass(Registry);
   initializeHardwareLoopsPass(Registry);
   initializeTypePromotionPass(Registry);
   initializeReplaceWithVeclibLegacyPass(Registry);

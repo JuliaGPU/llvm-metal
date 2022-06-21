@@ -612,6 +612,12 @@ MachineFunction *MachineOutliner::createOutlinedFunction(
   F->setLinkage(GlobalValue::InternalLinkage);
   F->setUnnamedAddr(GlobalValue::UnnamedAddr::Global);
 
+  // Set nounwind, so we don't generate eh_frame.
+  if (llvm::all_of(OF.Candidates, [](const outliner::Candidate &C) {
+        return C.getMF()->getFunction().hasFnAttribute(Attribute::NoUnwind);
+      }))
+    F->addFnAttr(Attribute::NoUnwind);
+
   // Set optsize/minsize, so we don't insert padding between outlined
   // functions.
   F->addFnAttr(Attribute::OptimizeForSize);

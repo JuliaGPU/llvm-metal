@@ -4026,7 +4026,8 @@ Value *llvm::UpgradeBitCastExpr(unsigned Opc, Constant *C, Type *DestTy) {
 /// info. Return true if module is modified.
 bool llvm::UpgradeDebugInfo(Module &M) {
   unsigned Version = getDebugMetadataVersionFromModule(M);
-  if (Version == DEBUG_METADATA_VERSION) {
+  if (Version == DEBUG_METADATA_VERSION ||
+      Version == IOS_METAL_DEBUG_METADATA_VERSION) {
     bool BrokenDebugInfo = false;
     if (verifyModule(M, &llvm::errs(), &BrokenDebugInfo))
       report_fatal_error("Broken module found, compilation aborted!");

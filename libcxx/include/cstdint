@@ -7,6 +7,8 @@
 //
 //===----------------------------------------------------------------------===//
 
+#if defined(FLOOR_COMPUTE_HOST_DEVICE) // we don't want this for other backends
+
 #ifndef _LIBCPP_CSTDINT
 #define _LIBCPP_CSTDINT
 
@@ -188,3 +190,5 @@ using ::uintmax_t _LIBCPP_USING_IF_EXISTS;
 _LIBCPP_END_NAMESPACE_STD
 
 #endif // _LIBCPP_CSTDINT
+
+#endif

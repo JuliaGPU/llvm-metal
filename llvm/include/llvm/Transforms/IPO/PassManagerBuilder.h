@@ -186,6 +186,20 @@ public:
   /// Path of the sample Profile data file.
   std::string PGOSampleUse;
 
+  bool EnableAddressSpaceFix;
+  bool EnableCUDAPasses;
+  bool EnableMetalPasses;
+  bool EnableMetalIntelWorkarounds;
+  bool EnableMetalNvidiaWorkarounds;
+  bool EnableSPIRPasses;
+  bool EnableSPIRIntelWorkarounds;
+  bool EnableVerifySPIR;
+  bool EnableVulkanPasses;
+  bool EnableVulkanLLVMPreStructurizationPass;
+
+  // can't rely on clang header here, so just use a uint32_t
+  unsigned int floor_image_capabilities { 0 };
+
 private:
   /// ExtensionList - This is list of all of the extensions that are registered.
   std::vector<std::pair<ExtensionPointTy, ExtensionFn>> Extensions;

@@ -38,6 +38,7 @@ namespace clang {
   struct ThisAdjustment;
   struct ThunkInfo;
   class VarDecl;
+  class FieldDecl;
 
 /// MangleContext - Context for tracking state which persists across multiple
 /// calls to the C++ name mangler.
@@ -164,6 +165,9 @@ public:
   /// TODO: Extend this to internal types by generating names that are unique
   /// across translation units so it can be used with LTO.
   virtual void mangleTypeName(QualType T, raw_ostream &) = 0;
+
+  virtual void mangleMetalFieldName(const FieldDecl *D, const CXXRecordDecl* RD, raw_ostream &) {}
+  virtual void mangleMetalGeneric(const std::string& name, QualType Ty, const CXXRecordDecl* RD, raw_ostream &) {}
 
   /// @}
 };

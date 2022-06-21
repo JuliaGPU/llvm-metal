@@ -235,6 +235,9 @@ serialization::TypeIdxFromBuiltin(const BuiltinType *BT) {
   case BuiltinType::OCLReserveID:
     ID = PREDEF_TYPE_RESERVE_ID_ID;
     break;
+  case BuiltinType::OCLPatchControlPoint:
+    ID = PREDEF_TYPE_PATCH_CONTROL_POINT_ID;
+    break;
 #define SVE_TYPE(Name, Id, SingletonId) \
   case BuiltinType::Id: \
     ID = PREDEF_TYPE_##Id##_ID; \

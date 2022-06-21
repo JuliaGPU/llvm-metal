@@ -39,6 +39,9 @@ enum class LangAS : unsigned {
   opencl_global_device,
   opencl_global_host,
 
+  // Vulkan specific address spaces.
+  vulkan_input,
+
   // CUDA specific address spaces.
   cuda_device,
   cuda_constant,

@@ -64,7 +64,9 @@ public:
 #include <type_traits>
 
 #ifdef _LIBCPP_NO_EXCEPTIONS
+#if 0
 #include <cstdlib>
+#endif
 #endif
 
 #if !defined(_LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER)
@@ -349,7 +351,7 @@ class _LIBCPP_EXCEPTION_ABI bad_cast
   bad_cast() _NOEXCEPT;
   bad_cast(const bad_cast&) _NOEXCEPT = default;
   virtual ~bad_cast() _NOEXCEPT;
-  virtual const char* what() const _NOEXCEPT;
+  virtual constant const char* what() const _NOEXCEPT;
 };
 
 class _LIBCPP_EXCEPTION_ABI bad_typeid
@@ -358,7 +360,7 @@ class _LIBCPP_EXCEPTION_ABI bad_typeid
  public:
   bad_typeid() _NOEXCEPT;
   virtual ~bad_typeid() _NOEXCEPT;
-  virtual const char* what() const _NOEXCEPT;
+  virtual constant const char* what() const _NOEXCEPT;
 };
 
 }  // std
@@ -372,7 +374,7 @@ void __throw_bad_cast()
 #ifndef _LIBCPP_NO_EXCEPTIONS
     throw bad_cast();
 #else
-    _VSTD::abort();
+    __builtin_unreachable();
 #endif
 }
 _LIBCPP_END_NAMESPACE_STD

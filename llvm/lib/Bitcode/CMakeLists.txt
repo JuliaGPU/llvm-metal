@@ -1,2 +1,5 @@
 add_subdirectory(Reader)
 add_subdirectory(Writer)
+add_subdirectory(Writer32)
+add_subdirectory(Writer50)
+add_subdirectory(MetalLib)

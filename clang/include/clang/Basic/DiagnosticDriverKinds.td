@@ -206,6 +206,9 @@ def err_drv_nested_config_file: Error<
 def err_drv_arg_requires_bitcode_input: Error<
   "option '%0' requires input to be LLVM bitcode">;
 
+def err_drv_floor_function_info : Error<
+  "unable to open floor function info file">, DefaultFatal;
+
 def err_target_unsupported_arch
   : Error<"the target architecture '%0' is not supported by the target '%1'">;
 def err_cpu_unsupported_isa

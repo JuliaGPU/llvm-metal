@@ -66,20 +66,12 @@ ExprResult Sema::ActOnCUDAExecConfigExpr(Scope *S, SourceLocation LLLLoc,
 
 Sema::CUDAFunctionTarget
 Sema::IdentifyCUDATarget(const ParsedAttributesView &Attrs) {
-  bool HasHostAttr = false;
-  bool HasDeviceAttr = false;
   bool HasGlobalAttr = false;
-  bool HasInvalidTargetAttr = false;
+  [[maybe_unused]] bool HasInvalidTargetAttr = false;
   for (const ParsedAttr &AL : Attrs) {
     switch (AL.getKind()) {
-    case ParsedAttr::AT_CUDAGlobal:
+    case ParsedAttr::AT_ComputeKernel:
       HasGlobalAttr = true;
-      break;
-    case ParsedAttr::AT_CUDAHost:
-      HasHostAttr = true;
-      break;
-    case ParsedAttr::AT_CUDADevice:
-      HasDeviceAttr = true;
       break;
     case ParsedAttr::AT_CUDAInvalidTarget:
       HasInvalidTargetAttr = true;
@@ -89,19 +81,18 @@ Sema::IdentifyCUDATarget(const ParsedAttributesView &Attrs) {
     }
   }
 
+#if 0 // we don't want this
   if (HasInvalidTargetAttr)
     return CFT_InvalidTarget;
+#endif
 
   if (HasGlobalAttr)
     return CFT_Global;
 
-  if (HasHostAttr && HasDeviceAttr)
-    return CFT_HostDevice;
-
-  if (HasDeviceAttr)
-    return CFT_Device;
-
-  return CFT_Host;
+  // if not a kernel, always default to device
+  // this is IMO a much saner approach and doesn't require to add the __device__
+  // attribute to _all_ functions
+  return CFT_Device;
 }
 
 template <typename A>
@@ -115,6 +106,7 @@ static bool hasAttr(const FunctionDecl *D, bool IgnoreImplicitAttr) {
 /// IdentifyCUDATarget - Determine the CUDA compilation target for this function
 Sema::CUDAFunctionTarget Sema::IdentifyCUDATarget(const FunctionDecl *D,
                                                   bool IgnoreImplicitHDAttr) {
+#if 0 // we don't want this
   // Code that lives outside a function is run on the host.
   if (D == nullptr)
     return CFT_Host;
@@ -122,7 +114,7 @@ Sema::CUDAFunctionTarget Sema::IdentifyCUDATarget(const FunctionDecl *D,
   if (D->hasAttr<CUDAInvalidTargetAttr>())
     return CFT_InvalidTarget;
 
-  if (D->hasAttr<CUDAGlobalAttr>())
+  if (D->hasAttr<ComputeKernelAttr>())
     return CFT_Global;
 
   if (hasAttr<CUDADeviceAttr>(D, IgnoreImplicitHDAttr)) {
@@ -139,10 +131,16 @@ Sema::CUDAFunctionTarget Sema::IdentifyCUDATarget(const FunctionDecl *D,
   }
 
   return CFT_Host;
+#else // -> either device or global/kernel
+  if (D != nullptr && D->hasAttr<ComputeKernelAttr>())
+    return CFT_Global;
+  return CFT_Device;
+#endif
 }
 
 /// IdentifyTarget - Determine the CUDA compilation target for this variable.
 Sema::CUDAVariableTarget Sema::IdentifyCUDATarget(const VarDecl *Var) {
+#if 0 // we don't want this
   if (Var->hasAttr<HIPManagedAttr>())
     return CVT_Unified;
   if (Var->isConstexpr() && !hasExplicitAttr<CUDAConstantAttr>(Var))
@@ -171,6 +169,9 @@ Sema::CUDAVariableTarget Sema::IdentifyCUDATarget(const VarDecl *Var) {
     }
   }
   return CVT_Host;
+#else // -> always device
+  return CVT_Device;
+#endif
 }
 
 // * CUDA Call preference table
@@ -443,7 +444,7 @@ bool Sema::inferCUDATargetForImplicitSpecialMember(CXXRecordDecl *ClassDecl,
 
   // If no target was inferred, mark this member as __host__ __device__;
   // it's the least restrictive option that can be invoked from any target.
-  bool NeedsH = true, NeedsD = true;
+  [[maybe_unused]] bool NeedsH = true, NeedsD = true;
   if (InferredTarget.hasValue()) {
     if (InferredTarget.getValue() == CFT_Device)
       NeedsH = false;
@@ -455,8 +456,8 @@ bool Sema::inferCUDATargetForImplicitSpecialMember(CXXRecordDecl *ClassDecl,
   // previously set ones.
   if (NeedsD && !HasD)
     MemberDecl->addAttr(CUDADeviceAttr::CreateImplicit(Context));
-  if (NeedsH && !HasH)
-    MemberDecl->addAttr(CUDAHostAttr::CreateImplicit(Context));
+  //if (NeedsH && !HasH)
+  //  MemberDecl->addAttr(CUDAHostAttr::CreateImplicit(Context));
 
   return false;
 }
@@ -662,8 +663,8 @@ void Sema::maybeAddCUDAHostDeviceAttrs(FunctionDecl *NewD,
   assert(getLangOpts().CUDA && "Should only be called during CUDA compilation");
 
   if (ForceCUDAHostDeviceDepth > 0) {
-    if (!NewD->hasAttr<CUDAHostAttr>())
-      NewD->addAttr(CUDAHostAttr::CreateImplicit(Context));
+    //if (!NewD->hasAttr<CUDAHostAttr>())
+    //  NewD->addAttr(CUDAHostAttr::CreateImplicit(Context));
     if (!NewD->hasAttr<CUDADeviceAttr>())
       NewD->addAttr(CUDADeviceAttr::CreateImplicit(Context));
     return;
@@ -671,7 +672,7 @@ void Sema::maybeAddCUDAHostDeviceAttrs(FunctionDecl *NewD,
 
   if (!getLangOpts().CUDAHostDeviceConstexpr || !NewD->isConstexpr() ||
       NewD->isVariadic() || NewD->hasAttr<CUDAHostAttr>() ||
-      NewD->hasAttr<CUDADeviceAttr>() || NewD->hasAttr<CUDAGlobalAttr>())
+      NewD->hasAttr<CUDADeviceAttr>() || NewD->hasAttr<ComputeKernelAttr>())
     return;
 
   // Is D a __device__ function with the same signature as NewD, ignoring CUDA
@@ -702,7 +703,7 @@ void Sema::maybeAddCUDAHostDeviceAttrs(FunctionDecl *NewD,
     return;
   }
 
-  NewD->addAttr(CUDAHostAttr::CreateImplicit(Context));
+  //NewD->addAttr(CUDAHostAttr::CreateImplicit(Context));
   NewD->addAttr(CUDADeviceAttr::CreateImplicit(Context));
 }
 
@@ -845,6 +846,7 @@ bool Sema::CheckCUDACall(SourceLocation Loc, FunctionDecl *Callee) {
 // should be diagnosed.
 void Sema::CUDACheckLambdaCapture(CXXMethodDecl *Callee,
                                   const sema::Capture &Capture) {
+#if 0 // we don't want this
   // In host compilation we only need to check lambda functions emitted on host
   // side. In such lambda functions, a reference capture is invalid only
   // if the lambda structure is populated by a device function or kernel then
@@ -868,7 +870,7 @@ void Sema::CUDACheckLambdaCapture(CXXMethodDecl *Callee,
   // to and called in a device function or kernel.
   bool CalleeIsDevice = Callee->hasAttr<CUDADeviceAttr>();
   bool CallerIsHost =
-      !Caller->hasAttr<CUDAGlobalAttr>() && !Caller->hasAttr<CUDADeviceAttr>();
+      !Caller->hasAttr<ComputeKernelAttr>() && !Caller->hasAttr<CUDADeviceAttr>();
   bool ShouldCheck = CalleeIsDevice && CallerIsHost;
   if (!ShouldCheck || !Capture.isReferenceCapture())
     return;
@@ -887,6 +889,7 @@ void Sema::CUDACheckLambdaCapture(CXXMethodDecl *Callee,
                           *this);
   }
   return;
+#endif
 }
 
 void Sema::CUDASetLambdaAttrs(CXXMethodDecl *Method) {
@@ -894,7 +897,7 @@ void Sema::CUDASetLambdaAttrs(CXXMethodDecl *Method) {
   if (Method->hasAttr<CUDAHostAttr>() || Method->hasAttr<CUDADeviceAttr>())
     return;
   Method->addAttr(CUDADeviceAttr::CreateImplicit(Context));
-  Method->addAttr(CUDAHostAttr::CreateImplicit(Context));
+  //Method->addAttr(CUDAHostAttr::CreateImplicit(Context));
 }
 
 void Sema::checkCUDATargetOverload(FunctionDecl *NewFD,
@@ -939,7 +942,7 @@ static void copyAttrIfPresent(Sema &S, FunctionDecl *FD,
 void Sema::inheritCUDATargetAttrs(FunctionDecl *FD,
                                   const FunctionTemplateDecl &TD) {
   const FunctionDecl &TemplateFD = *TD.getTemplatedDecl();
-  copyAttrIfPresent<CUDAGlobalAttr>(*this, FD, TemplateFD);
+  copyAttrIfPresent<ComputeKernelAttr>(*this, FD, TemplateFD);
   copyAttrIfPresent<CUDAHostAttr>(*this, FD, TemplateFD);
   copyAttrIfPresent<CUDADeviceAttr>(*this, FD, TemplateFD);
 }

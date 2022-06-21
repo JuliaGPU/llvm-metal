@@ -106,7 +106,7 @@ static Attr *handleLoopHintAttr(Sema &S, Stmt *St, const ParsedAttr &A,
     if (ValueExpr)
       SetHints(LoopHintAttr::UnrollCount, LoopHintAttr::Numeric);
     else
-      SetHints(LoopHintAttr::Unroll, LoopHintAttr::Enable);
+      SetHints(LoopHintAttr::Unroll, LoopHintAttr::Full);
   } else if (PragmaName == "nounroll_and_jam") {
     SetHints(LoopHintAttr::UnrollAndJam, LoopHintAttr::Disable);
   } else if (PragmaName == "unroll_and_jam") {

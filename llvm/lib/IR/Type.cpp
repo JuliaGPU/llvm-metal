@@ -445,6 +445,15 @@ bool StructType::containsScalableVectorType() const {
 }
 
 void StructType::setBody(ArrayRef<Type*> Elements, bool isPacked) {
+  // ignore already layed out (cached) image types
+  if (!isOpaque() && !Elements.empty()) {
+    if (Elements[0]->isPointerTy() &&
+        Elements[0]->getPointerAddressSpace() != 0 &&
+        !Elements[0]->getPointerElementType()->isSized()) {
+      return;
+    }
+  }
+
   assert(isOpaque() && "Struct body already set!");
 
   setSubclassData(getSubclassData() | SCDB_HasBody);

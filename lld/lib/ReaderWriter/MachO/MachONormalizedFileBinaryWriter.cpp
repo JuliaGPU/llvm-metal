@@ -1294,10 +1294,10 @@ void TrieNode::addSymbol(const Export& entry,
     }
   }
   if (entry.flags & EXPORT_SYMBOL_FLAGS_REEXPORT) {
-    assert(entry.otherOffset != 0);
+    assert(entry.otherOffset != uint32_t(0u));
   }
   if (entry.flags & EXPORT_SYMBOL_FLAGS_STUB_AND_RESOLVER) {
-    assert(entry.otherOffset != 0);
+    assert(entry.otherOffset != uint32_t(0u));
   }
   // No commonality with any existing child, make a new edge.
   auto *newNode = new (allocator) TrieNode(entry.name.copy(allocator));

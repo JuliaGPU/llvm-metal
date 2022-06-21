@@ -13,6 +13,7 @@ set(LLVM_LINK_COMPONENTS
   AggressiveInstCombine
   InstCombine
   Instrumentation
+  LibFloor
   Linker
   ObjCARCOpts
   ScalarOpts

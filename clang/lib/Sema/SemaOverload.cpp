@@ -23,6 +23,7 @@
 #include "clang/Basic/PartialDiagnostic.h"
 #include "clang/Basic/SourceManager.h"
 #include "clang/Basic/TargetInfo.h"
+#include "clang/Lex/Preprocessor.h"
 #include "clang/Sema/Initialization.h"
 #include "clang/Sema/Lookup.h"
 #include "clang/Sema/Overload.h"
@@ -143,9 +144,9 @@ ImplicitConversionRank clang::GetConversionRank(ImplicitConversionKind Kind) {
     ICR_Conversion,
     ICR_Conversion,
     ICR_Writeback_Conversion,
-    ICR_Exact_Match, // NOTE(gbiv): This may not be completely right --
-                     // it was omitted by the patch that added
-                     // ICK_Zero_Event_Conversion
+    ICR_Conversion,
+    ICR_Conversion,
+    ICR_Conversion,
     ICR_C_Conversion,
     ICR_C_Conversion_Extension
   };
@@ -181,7 +182,9 @@ static const char* GetImplicitConversionName(ImplicitConversionKind Kind) {
     "Block Pointer conversion",
     "Transparent Union Conversion",
     "Writeback conversion",
-    "OpenCL Zero Event Conversion",
+    "OpenCL Zero Event conversion",
+    "OpenCL Zero Queue Conversion",
+    "OpenCL Integer-to-Sampler conversion",
     "C specific type conversion",
     "Incompatible pointer conversion"
   };
@@ -1947,7 +1950,7 @@ static bool IsStandardConversion(Sema &S, Expr* From, QualType ToType,
     FromType = ToType;
   } else if (ToType->isSamplerT() &&
              From->isIntegerConstantExpr(S.getASTContext())) {
-    SCS.Second = ICK_Compatible_Conversion;
+    SCS.Second = ICK_Int_Sampler_Conversion;
     FromType = ToType;
   } else {
     // No second conversion required.
@@ -3226,9 +3229,11 @@ static bool isQualificationConversionStep(QualType FromType, QualType ToType,
 
   //   -- for every j > 0, if const is in cv 1,j then const is in cv
   //      2,j, and similarly for volatile.
-  if (!CStyle && !ToQuals.compatiblyIncludes(FromQuals))
+  // NOTE: we want to have hard address space checking here if both types do have an actual address space, but we do allow casting to/from default adress space
+  if (!CStyle && !ToQuals.compatiblyIncludes(FromQuals, true /* check AS */, true /* allow default <-> other AS cast */))
     return false;
 
+#if 0 // we don't want this
   // If address spaces mismatch:
   //  - in top level it is only valid to convert to addr space that is a
   //    superset in all cases apart from C-style casts where we allow
@@ -3239,6 +3244,7 @@ static bool isQualificationConversionStep(QualType FromType, QualType ToType,
        !(ToQuals.isAddressSpaceSupersetOf(FromQuals) ||
          (CStyle && FromQuals.isAddressSpaceSupersetOf(ToQuals)))))
     return false;
+#endif
 
   //   -- if the cv 1,j and cv 2,j are different, then const is in
   //      every cv for 0 < k < j.
@@ -4920,7 +4926,7 @@ TryReferenceInit(Sema &S, Expr *Init, QualType DeclType,
     // MS compiler ignores __unaligned qualifier for references; do the same.
     T1Quals.removeUnaligned();
     T2Quals.removeUnaligned();
-    if (!T1Quals.compatiblyIncludes(T2Quals))
+    if (!T1Quals.compatiblyIncludes(T2Quals, !S.Context.getLangOpts().OpenCL))
       return ICS;
   }
 
@@ -5402,6 +5408,7 @@ TryObjectArgumentInitialization(Sema &S, SourceLocation Loc, QualType FromType,
     return ICS;
   }
 
+#if 0 // we don't want this
   if (FromTypeCanon.hasAddressSpace()) {
     Qualifiers QualsImplicitParamType = ImplicitParamType.getQualifiers();
     Qualifiers QualsFromType = FromTypeCanon.getQualifiers();
@@ -5411,6 +5418,7 @@ TryObjectArgumentInitialization(Sema &S, SourceLocation Loc, QualType FromType,
       return ICS;
     }
   }
+#endif
 
   // Check that we have either the same type or a derived type. It
   // affects the conversion rank.
@@ -5554,14 +5562,14 @@ Sema::PerformObjectArgumentInitialization(Expr *From,
   }
 
   if (!Context.hasSameType(From->getType(), DestType)) {
-    CastKind CK;
+    CastKind CK = CK_NoOp;
+#if 0 // we don't want this
     QualType PteeTy = DestType->getPointeeType();
     LangAS DestAS =
         PteeTy.isNull() ? DestType.getAddressSpace() : PteeTy.getAddressSpace();
     if (FromRecordType.getAddressSpace() != DestAS)
       CK = CK_AddressSpaceConversion;
-    else
-      CK = CK_NoOp;
+#endif
     From = ImpCastExprToType(From, DestType, CK, From->getValueKind()).get();
   }
   return From;
@@ -5620,6 +5628,7 @@ static bool CheckConvertedConstantConversions(Sema &S,
   case ICK_Integral_Promotion:
   case ICK_Integral_Conversion: // Narrowing conversions are checked elsewhere.
   case ICK_Zero_Queue_Conversion:
+  case ICK_Int_Sampler_Conversion:
     return true;
 
   case ICK_Boolean_Conversion:
@@ -6440,6 +6449,7 @@ void Sema::AddOverloadCandidate(
       }
     }
 
+#if 0 // we don't want this
     // Check that the constructor is capable of constructing an object in the
     // destination address space.
     if (!Qualifiers::isAddressSpaceSupersetOf(
@@ -6448,6 +6458,7 @@ void Sema::AddOverloadCandidate(
       Candidate.Viable = false;
       Candidate.FailureKind = ovl_fail_object_addrspace_mismatch;
     }
+#endif
   }
 
   unsigned NumParams = Proto->getNumParams();

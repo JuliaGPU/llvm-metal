@@ -688,15 +688,19 @@ void* align(size_t alignment, size_t size, void*& ptr, size_t& space);
 #include <__memory/uses_allocator.h>
 #include <compare>
 #include <cstddef>
+#if 0
 #include <cstdint>
 #include <cstring>
+#endif
 #include <iosfwd>
 #include <iterator>
 #include <new>
 #include <stdexcept>
 #include <tuple>
 #include <type_traits>
+#if 0
 #include <typeinfo>
+#endif
 #include <utility>
 #include <version>
 
@@ -735,7 +739,7 @@ _LIBCPP_INLINE_VISIBILITY
 void __construct_forward_with_exception_guarantees(_Alloc&, _Tp* __begin1, _Tp* __end1, _Tp*& __begin2) {
     ptrdiff_t _Np = __end1 - __begin1;
     if (_Np > 0) {
-        _VSTD::memcpy(__begin2, __begin1, _Np * sizeof(_Tp));
+        __builtin_memcpy(__begin2, __begin1, _Np * sizeof(_Tp));
         __begin2 += _Np;
     }
 }
@@ -762,7 +766,7 @@ _LIBCPP_INLINE_VISIBILITY
 void __construct_range_forward(_Alloc&, _Source* __begin1, _Source* __end1, _Dest*& __begin2) {
     ptrdiff_t _Np = __end1 - __begin1;
     if (_Np > 0) {
-        _VSTD::memcpy(const_cast<_RawDest*>(__begin2), __begin1, _Np * sizeof(_Dest));
+        __builtin_memcpy(const_cast<_RawDest*>(__begin2), __begin1, _Np * sizeof(_Dest));
         __begin2 += _Np;
     }
 }
@@ -794,7 +798,7 @@ void __construct_backward_with_exception_guarantees(_Alloc&, _Tp* __begin1, _Tp*
     ptrdiff_t _Np = __end1 - __begin1;
     __end2 -= _Np;
     if (_Np > 0)
-        _VSTD::memcpy(static_cast<void*>(__end2), static_cast<void const*>(__begin1), _Np * sizeof(_Tp));
+        __builtin_memcpy(static_cast<void*>(__end2), static_cast<void const*>(__begin1), _Np * sizeof(_Tp));
 }
 
 struct __destruct_n

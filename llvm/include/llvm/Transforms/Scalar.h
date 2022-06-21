@@ -79,7 +79,7 @@ FunctionPass *createCallSiteSplittingPass();
 // algorithm assumes instructions are dead until proven otherwise, which makes
 // it more successful are removing non-obviously dead instructions.
 //
-FunctionPass *createAggressiveDCEPass();
+FunctionPass *createAggressiveDCEPass(bool allow_cfg_removal = true);
 
 //===----------------------------------------------------------------------===//
 //

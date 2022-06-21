@@ -12,7 +12,9 @@
 #include <__config>
 #include <__algorithm/unwrap_iter.h>
 #include <__iterator/iterator_traits.h>
+#if 0
 #include <cstring>
+#endif
 #include <type_traits>
 
 #if !defined(_LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER)

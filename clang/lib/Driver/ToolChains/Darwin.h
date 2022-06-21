@@ -525,6 +525,10 @@ public:
 
   LangOptions::StackProtectorMode
   GetDefaultStackProtectorLevel(bool KernelOrKext) const override {
+    // not supported on AIR/Metal
+    if (getTriple().getArch() == llvm::Triple::ArchType::air64)
+      return LangOptions::SSPOff;
+
     // Stack protectors default to on for user code on 10.5,
     // and for everything in 10.6 and beyond
     if (isTargetIOSBased() || isTargetWatchOSBased())

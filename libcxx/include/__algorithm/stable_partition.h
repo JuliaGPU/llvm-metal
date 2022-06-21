@@ -21,6 +21,7 @@
 
 _LIBCPP_BEGIN_NAMESPACE_STD
 
+#if 0
 template <class _Predicate, class _ForwardIterator, class _Distance, class _Pair>
 _ForwardIterator
 __stable_partition(_ForwardIterator __first, _ForwardIterator __last, _Predicate __pred,
@@ -289,6 +290,7 @@ stable_partition(_ForwardIterator __first, _ForwardIterator __last, _Predicate _
 {
     return _VSTD::__stable_partition<_Predicate&>(__first, __last, __pred, typename iterator_traits<_ForwardIterator>::iterator_category());
 }
+#endif
 
 _LIBCPP_END_NAMESPACE_STD
 

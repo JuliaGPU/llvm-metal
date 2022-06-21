@@ -593,6 +593,12 @@ BackendConsumer::InlineAsmDiagHandler(const llvm::DiagnosticInfoInlineAsm &D) {
     // If Loc is invalid, we still need to report the diagnostic, it just gets
     // no location info.
     FullSourceLoc Loc;
+    if (const auto instr = D.getInstruction(); instr) {
+      Message += ": ";
+      llvm::raw_string_ostream instr_stream(Message);
+      instr->print(instr_stream);
+      instr_stream.flush();
+    }
     Diags.Report(Loc, DiagID).AddString(Message);
   }
   // We handled all the possible severities.
@@ -962,7 +968,15 @@ GetOutputStream(CompilerInstance &CI, StringRef InFile, BackendAction Action) {
   case Backend_EmitLL:
     return CI.createDefaultOutputFile(false, InFile, "ll");
   case Backend_EmitBC:
+  case Backend_EmitBC32:
+  case Backend_EmitBC50:
     return CI.createDefaultOutputFile(true, InFile, "bc");
+  case Backend_EmitSPIRV:
+    return CI.createDefaultOutputFile(true, InFile, "spv");
+  case Backend_EmitSPIRVContainer:
+    return CI.createDefaultOutputFile(true, InFile, "spvc");
+  case Backend_EmitMetalLib:
+    return CI.createDefaultOutputFile(true, InFile, "metallib");
   case Backend_EmitNothing:
     return nullptr;
   case Backend_EmitMCNull:
@@ -1189,6 +1203,26 @@ EmitAssemblyAction::EmitAssemblyAction(llvm::LLVMContext *_VMContext)
 void EmitBCAction::anchor() { }
 EmitBCAction::EmitBCAction(llvm::LLVMContext *_VMContext)
   : CodeGenAction(Backend_EmitBC, _VMContext) {}
+
+void EmitBC32Action::anchor() { }
+EmitBC32Action::EmitBC32Action(llvm::LLVMContext *_VMContext)
+  : CodeGenAction(Backend_EmitBC32, _VMContext) {}
+
+void EmitBC50Action::anchor() { }
+EmitBC50Action::EmitBC50Action(llvm::LLVMContext *_VMContext)
+  : CodeGenAction(Backend_EmitBC50, _VMContext) {}
+
+void EmitSPIRVAction::anchor() { }
+EmitSPIRVAction::EmitSPIRVAction(llvm::LLVMContext *_VMContext)
+  : CodeGenAction(Backend_EmitSPIRV, _VMContext) {}
+
+void EmitSPIRVContainerAction::anchor() { }
+EmitSPIRVContainerAction::EmitSPIRVContainerAction(llvm::LLVMContext *_VMContext)
+  : CodeGenAction(Backend_EmitSPIRVContainer, _VMContext) {}
+
+void EmitMetalLibAction::anchor() { }
+EmitMetalLibAction::EmitMetalLibAction(llvm::LLVMContext *_VMContext)
+  : CodeGenAction(Backend_EmitMetalLib, _VMContext) {}
 
 void EmitLLVMAction::anchor() { }
 EmitLLVMAction::EmitLLVMAction(llvm::LLVMContext *_VMContext)

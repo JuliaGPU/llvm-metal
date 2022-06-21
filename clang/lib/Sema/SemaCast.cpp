@@ -694,7 +694,7 @@ CastsAwayConstness(Sema &Self, QualType SrcType, QualType DestType,
           *CastAwayQualifiers = SrcCvrQuals - DestCvrQuals;
 
         // If we removed a cvr-qualifier, this is casting away 'constness'.
-        if (!DestCvrQuals.compatiblyIncludes(SrcCvrQuals)) {
+        if (!DestCvrQuals.compatiblyIncludes(SrcCvrQuals, false)) {
           if (TheOffendingSrcType)
             *TheOffendingSrcType = PrevUnwrappedSrcType;
           if (TheOffendingDestType)
@@ -1244,6 +1244,7 @@ void CastOperation::CheckStaticCast() {
 }
 
 static bool IsAddressSpaceConversion(QualType SrcType, QualType DestType) {
+#if 0 // we don't want this
   auto *SrcPtrType = SrcType->getAs<PointerType>();
   if (!SrcPtrType)
     return false;
@@ -1252,6 +1253,9 @@ static bool IsAddressSpaceConversion(QualType SrcType, QualType DestType) {
     return false;
   return SrcPtrType->getPointeeType().getAddressSpace() !=
          DestPtrType->getPointeeType().getAddressSpace();
+#else
+  return false;
+#endif
 }
 
 /// TryStaticCast - Check if a static cast can be performed, and do so if
@@ -2564,10 +2568,12 @@ static TryCastResult TryAddressSpaceCast(Sema &Self, ExprResult &SrcExpr,
     return TC_NotApplicable;
   auto SrcPointeeType = SrcPtrType->getPointeeType();
   auto DestPointeeType = DestPtrType->getPointeeType();
+#if 0 // we don't want this
   if (!DestPointeeType.isAddressSpaceOverlapping(SrcPointeeType)) {
     msg = diag::err_bad_cxx_cast_addr_space_mismatch;
     return TC_Failed;
   }
+#endif
   auto SrcPointeeTypeWithoutAS =
       Self.Context.removeAddrSpaceQualType(SrcPointeeType.getCanonicalType());
   auto DestPointeeTypeWithoutAS =

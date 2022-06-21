@@ -845,23 +845,6 @@ void Parser::ParseBorlandTypeAttributes(ParsedAttributes &attrs) {
   }
 }
 
-void Parser::ParseOpenCLKernelAttributes(ParsedAttributes &attrs) {
-  // Treat these like attributes
-  while (Tok.is(tok::kw___kernel)) {
-    IdentifierInfo *AttrName = Tok.getIdentifierInfo();
-    SourceLocation AttrNameLoc = ConsumeToken();
-    attrs.addNew(AttrName, AttrNameLoc, nullptr, AttrNameLoc, nullptr, 0,
-                 ParsedAttr::AS_Keyword);
-  }
-}
-
-void Parser::ParseOpenCLQualifiers(ParsedAttributes &Attrs) {
-  IdentifierInfo *AttrName = Tok.getIdentifierInfo();
-  SourceLocation AttrNameLoc = Tok.getLocation();
-  Attrs.addNew(AttrName, AttrNameLoc, nullptr, AttrNameLoc, nullptr, 0,
-               ParsedAttr::AS_Keyword);
-}
-
 void Parser::ParseNullabilityTypeSpecifiers(ParsedAttributes &attrs) {
   // Treat these like attributes, even though they're type specifiers.
   while (true) {
@@ -2611,7 +2594,7 @@ bool Parser::ParseImplicitInt(DeclSpec &DS, CXXScopeSpec *SS,
 
   // Early exit as Sema has a dedicated missing_actual_pipe_type diagnostic
   // for incomplete declarations such as `pipe p`.
-  if (getLangOpts().OpenCLCPlusPlus && DS.isTypeSpecPipe())
+  if ((getLangOpts().OpenCLCPlusPlus || getLangOpts().CPlusPlus) && DS.isTypeSpecPipe())
     return false;
 
   if (getLangOpts().CPlusPlus &&
@@ -3055,7 +3038,6 @@ static void SetupFixedPointError(const LangOptions &LangOpts,
 /// [C99]   'inline'
 /// [C++]   'virtual'
 /// [C++]   'explicit'
-/// [OpenCL] '__kernel'
 ///       'friend': [C++ dcl.friend]
 ///       'constexpr': [C++0x dcl.constexpr]
 void Parser::ParseDeclarationSpecifiers(DeclSpec &DS,
@@ -3101,6 +3083,7 @@ void Parser::ParseDeclarationSpecifiers(DeclSpec &DS,
 
     SourceLocation Loc = Tok.getLocation();
 
+#if 0 // unused
     // Helper for image types in OpenCL.
     auto handleOpenCLImageKW = [&] (StringRef Ext, TypeSpecifierType ImageTypeSpec) {
       // Check if the image type is supported and otherwise turn the keyword into an identifier
@@ -3113,6 +3096,7 @@ void Parser::ParseDeclarationSpecifiers(DeclSpec &DS,
       isInvalid = DS.SetTypeSpecType(ImageTypeSpec, Loc, PrevSpec, DiagID, Policy);
       return true;
     };
+#endif
 
     // Turn off usual access checking for template specializations and
     // instantiations.
@@ -3647,11 +3631,6 @@ void Parser::ParseDeclarationSpecifiers(DeclSpec &DS,
       ParseBorlandTypeAttributes(DS.getAttributes());
       continue;
 
-    // OpenCL single token adornments.
-    case tok::kw___kernel:
-      ParseOpenCLKernelAttributes(DS.getAttributes());
-      continue;
-
     // Nullability type specifiers.
     case tok::kw__Nonnull:
     case tok::kw__Nullable:
@@ -4015,15 +3994,26 @@ void Parser::ParseDeclarationSpecifiers(DeclSpec &DS,
       } else
         isInvalid = DS.SetTypePipe(true, Loc, PrevSpec, DiagID, Policy);
       break;
-// We only need to enumerate each image type once.
-#define IMAGE_READ_WRITE_TYPE(Type, Id, Ext)
-#define IMAGE_WRITE_TYPE(Type, Id, Ext)
-#define IMAGE_READ_TYPE(ImgType, Id, Ext) \
-    case tok::kw_##ImgType##_t: \
-      if (!handleOpenCLImageKW(Ext, DeclSpec::TST_##ImgType##_t)) \
-        goto DoneWithDeclSpec; \
+    case tok::kw_sampler_t:
+      isInvalid = DS.SetTypeSpecType(DeclSpec::TST_sampler_t, Loc,
+                                     PrevSpec, DiagID, Policy);
       break;
-#include "clang/Basic/OpenCLImageTypes.def"
+    case tok::kw_event_t:
+      isInvalid = DS.SetTypeSpecType(DeclSpec::TST_event_t, Loc,
+                                     PrevSpec, DiagID, Policy);
+      break;
+    case tok::kw_queue_t:
+      isInvalid = DS.SetTypeSpecType(DeclSpec::TST_queue_t, Loc,
+                                     PrevSpec, DiagID, Policy);
+      break;
+    case tok::kw_clk_event_t:
+      isInvalid = DS.SetTypeSpecType(DeclSpec::TST_clk_event_t, Loc,
+                                     PrevSpec, DiagID, Policy);
+      break;
+    case tok::kw_reserve_id_t:
+      isInvalid = DS.SetTypeSpecType(DeclSpec::TST_reserve_id_t, Loc,
+                                     PrevSpec, DiagID, Policy);
+    break;
     case tok::kw___unknown_anytype:
       isInvalid = DS.SetTypeSpecType(TST_unknown_anytype, Loc,
                                      PrevSpec, DiagID, Policy);
@@ -4126,36 +4116,6 @@ void Parser::ParseDeclarationSpecifiers(DeclSpec &DS,
       }
       isInvalid = DS.SetTypeQual(DeclSpec::TQ_atomic, Loc, PrevSpec, DiagID,
                                  getLangOpts());
-      break;
-
-    // OpenCL address space qualifiers:
-    case tok::kw___generic:
-      // generic address space is introduced only in OpenCL v2.0
-      // see OpenCL C Spec v2.0 s6.5.5
-      // OpenCL v3.0 introduces __opencl_c_generic_address_space
-      // feature macro to indicate if generic address space is supported
-      if (!Actions.getLangOpts().OpenCLGenericAddressSpace) {
-        DiagID = diag::err_opencl_unknown_type_specifier;
-        PrevSpec = Tok.getIdentifierInfo()->getNameStart();
-        isInvalid = true;
-        break;
-      }
-      LLVM_FALLTHROUGH;
-    case tok::kw_private:
-      // It's fine (but redundant) to check this for __generic on the
-      // fallthrough path; we only form the __generic token in OpenCL mode.
-      if (!getLangOpts().OpenCL)
-        goto DoneWithDeclSpec;
-      LLVM_FALLTHROUGH;
-    case tok::kw___private:
-    case tok::kw___global:
-    case tok::kw___local:
-    case tok::kw___constant:
-    // OpenCL access qualifiers:
-    case tok::kw___read_only:
-    case tok::kw___write_only:
-    case tok::kw___read_write:
-      ParseOpenCLQualifiers(DS.getAttributes());
       break;
 
     case tok::less:
@@ -5030,8 +4990,12 @@ bool Parser::isKnownToBeTypeSpecifier(const Token &Tok) const {
   case tok::kw__Decimal64:
   case tok::kw__Decimal128:
   case tok::kw___vector:
-#define GENERIC_IMAGE_TYPE(ImgType, Id) case tok::kw_##ImgType##_t:
-#include "clang/Basic/OpenCLImageTypes.def"
+
+    // OpenCL specific types:
+  case tok::kw_sampler_t:
+  case tok::kw_event_t:
+  case tok::kw_queue_t:
+  case tok::kw_clk_event_t:
 
     // struct-or-union-specifier (C99) or class-specifier (C++)
   case tok::kw_class:
@@ -5112,8 +5076,12 @@ bool Parser::isTypeSpecifierQualifier() {
   case tok::kw__Decimal64:
   case tok::kw__Decimal128:
   case tok::kw___vector:
-#define GENERIC_IMAGE_TYPE(ImgType, Id) case tok::kw_##ImgType##_t:
-#include "clang/Basic/OpenCLImageTypes.def"
+
+    // OpenCL specific types:
+  case tok::kw_sampler_t:
+  case tok::kw_event_t:
+  case tok::kw_queue_t:
+  case tok::kw_clk_event_t:
 
     // struct-or-union-specifier (C99) or class-specifier (C++)
   case tok::kw_class:
@@ -5158,19 +5126,10 @@ bool Parser::isTypeSpecifierQualifier() {
   case tok::kw__Null_unspecified:
 
   case tok::kw___kindof:
-
-  case tok::kw___private:
-  case tok::kw___local:
-  case tok::kw___global:
-  case tok::kw___constant:
-  case tok::kw___generic:
-  case tok::kw___read_only:
-  case tok::kw___read_write:
-  case tok::kw___write_only:
     return true;
 
-  case tok::kw_private:
-    return getLangOpts().OpenCL;
+  case tok::kw_reserve_id_t:
+    return getLangOpts().OpenCL && getLangOpts().OpenCLVersion >= 200;
 
   // C11 _Atomic
   case tok::kw__Atomic:
@@ -5284,6 +5243,13 @@ bool Parser::isDeclarationSpecifier(bool DisambiguatingWithExpression) {
   case tok::kw__Decimal128:
   case tok::kw___vector:
 
+    // OpenCL specific types:
+  case tok::kw_sampler_t:
+  case tok::kw_event_t:
+  case tok::kw_queue_t:
+  case tok::kw_clk_event_t:
+  case tok::kw_reserve_id_t:
+
     // struct-or-union-specifier (C99) or class-specifier (C++)
   case tok::kw_class:
   case tok::kw_struct:
@@ -5390,21 +5356,7 @@ bool Parser::isDeclarationSpecifier(bool DisambiguatingWithExpression) {
 
   case tok::kw___kindof:
 
-  case tok::kw___private:
-  case tok::kw___local:
-  case tok::kw___global:
-  case tok::kw___constant:
-  case tok::kw___generic:
-  case tok::kw___read_only:
-  case tok::kw___read_write:
-  case tok::kw___write_only:
-#define GENERIC_IMAGE_TYPE(ImgType, Id) case tok::kw_##ImgType##_t:
-#include "clang/Basic/OpenCLImageTypes.def"
-
     return true;
-
-  case tok::kw_private:
-    return getLangOpts().OpenCL;
   }
 }
 
@@ -5606,22 +5558,6 @@ void Parser::ParseTypeQualifierListOpt(
         Diag(Tok, diag::ext_c11_feature) << Tok.getName();
       isInvalid = DS.SetTypeQual(DeclSpec::TQ_atomic, Loc, PrevSpec, DiagID,
                                  getLangOpts());
-      break;
-
-    // OpenCL qualifiers:
-    case tok::kw_private:
-      if (!getLangOpts().OpenCL)
-        goto DoneWithTypeQuals;
-      LLVM_FALLTHROUGH;
-    case tok::kw___private:
-    case tok::kw___global:
-    case tok::kw___local:
-    case tok::kw___constant:
-    case tok::kw___generic:
-    case tok::kw___read_only:
-    case tok::kw___write_only:
-    case tok::kw___read_write:
-      ParseOpenCLQualifiers(DS.getAttributes());
       break;
 
     case tok::kw___unaligned:
@@ -6524,7 +6460,8 @@ void Parser::InitCXXThisScopeForDeclaratorIfRelevant(
   // Carry on using the first addr space for the qualifiers of 'this'.
   // The diagnostic will be given later while creating the function
   // prototype for the method.
-  if (getLangOpts().OpenCLCPlusPlus) {
+#if 0 // TODO: do we want this?
+  if (getLangOpts().OpenCLCPlusPlus || getLangOpts().CPlusPlus) {
     for (ParsedAttr &attr : DS.getAttributes()) {
       LangAS ASIdx = attr.asOpenCLLangAS();
       if (ASIdx != LangAS::Default) {
@@ -6533,6 +6470,7 @@ void Parser::InitCXXThisScopeForDeclaratorIfRelevant(
       }
     }
   }
+#endif
   ThisScope.emplace(Actions, dyn_cast<CXXRecordDecl>(Actions.CurContext), Q,
                     IsCXX11MemberFunction);
 }

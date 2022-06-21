@@ -64,6 +64,9 @@ protected:
   // Mode in which we are running the combiner.
   const bool MinimizeSize;
 
+  /// prevent certain illegal combines when generating IR for Vulkan.
+  const bool isVulkan;
+
   AAResults *AA;
 
   // Required analyses.
@@ -84,13 +87,13 @@ protected:
 
 public:
   InstCombiner(InstructionWorklist &Worklist, BuilderTy &Builder,
-               bool MinimizeSize, AAResults *AA, AssumptionCache &AC,
+               bool MinimizeSize, bool isVulkan_, AAResults *AA, AssumptionCache &AC,
                TargetLibraryInfo &TLI, TargetTransformInfo &TTI,
                DominatorTree &DT, OptimizationRemarkEmitter &ORE,
                BlockFrequencyInfo *BFI, ProfileSummaryInfo *PSI,
                const DataLayout &DL, LoopInfo *LI)
       : TTI(TTI), Builder(Builder), Worklist(Worklist),
-        MinimizeSize(MinimizeSize), AA(AA), AC(AC), TLI(TLI), DT(DT), DL(DL),
+        MinimizeSize(MinimizeSize), isVulkan(isVulkan_), AA(AA), AC(AC), TLI(TLI), DT(DT), DL(DL),
         SQ(DL, &TLI, &DT, &AC), ORE(ORE), BFI(BFI), PSI(PSI), LI(LI) {}
 
   virtual ~InstCombiner() {}

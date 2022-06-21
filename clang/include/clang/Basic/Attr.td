@@ -140,7 +140,7 @@ def FunctionLike : SubsetSubject<DeclBase,
                                  "functions, function pointers">;
 
 def OpenCLKernelFunction
-    : SubsetSubject<Function, [{S->hasAttr<OpenCLKernelAttr>()}],
+    : SubsetSubject<Function, [{S->hasAttr<ComputeKernelAttr>()}],
                     "kernel functions">;
 
 // HasFunctionProto is a more strict version of FunctionLike, so it should
@@ -1088,13 +1088,6 @@ def CPUDispatch : InheritableAttr {
 
 // CUDA attributes are spelled __attribute__((attr)) or __declspec(__attr__),
 // and they do not receive a [[]] spelling.
-def CUDAConstant : InheritableAttr {
-  let Spellings = [GNU<"constant">, Declspec<"__constant__">];
-  let Subjects = SubjectList<[Var]>;
-  let LangOpts = [CUDA];
-  let Documentation = [Undocumented];
-}
-
 def CUDACudartBuiltin : IgnoredAttr {
   let Spellings = [GNU<"cudart_builtin">, Declspec<"__cudart_builtin__">];
   let LangOpts = [CUDA];
@@ -1134,14 +1127,6 @@ def CUDADeviceBuiltinTextureType : InheritableAttr {
 def : MutualExclusions<[CUDADeviceBuiltinSurfaceType,
                         CUDADeviceBuiltinTextureType]>;
 
-def CUDAGlobal : InheritableAttr {
-  let Spellings = [GNU<"global">, Declspec<"__global__">];
-  let Subjects = SubjectList<[Function]>;
-  let LangOpts = [CUDA];
-  let Documentation = [Undocumented];
-}
-def : MutualExclusions<[CUDADevice, CUDAGlobal]>;
-
 def CUDAHost : InheritableAttr {
   let Spellings = [GNU<"host">, Declspec<"__host__">];
   let Subjects = SubjectList<[Function]>;
@@ -1149,7 +1134,6 @@ def CUDAHost : InheritableAttr {
   let Documentation = [Undocumented];
   let SimpleHandler = 1;
 }
-def : MutualExclusions<[CUDAGlobal, CUDAHost]>;
 
 def HIPManaged : InheritableAttr {
   let Spellings = [GNU<"managed">, Declspec<"__managed__">];
@@ -1176,14 +1160,6 @@ def CUDALaunchBounds : InheritableAttr {
   let Documentation = [Undocumented];
 }
 
-def CUDAShared : InheritableAttr {
-  let Spellings = [GNU<"shared">, Declspec<"__shared__">];
-  let Subjects = SubjectList<[Var]>;
-  let LangOpts = [CUDA];
-  let Documentation = [Undocumented];
-}
-def : MutualExclusions<[CUDAConstant, CUDAShared, HIPManaged]>;
-
 def SYCLKernel : InheritableAttr {
   let Spellings = [Clang<"sycl_kernel">];
   let Subjects = SubjectList<[FunctionTmpl]>;
@@ -1205,15 +1181,196 @@ def CXX11NoReturn : InheritableAttr {
   let SimpleHandler = 1;
 }
 
-// Similar to CUDA, OpenCL attributes do not receive a [[]] spelling because
-// the specification does not expose them with one currently.
-def OpenCLKernel : InheritableAttr {
-  let Spellings = [Keyword<"__kernel">, Keyword<"kernel">];
-  let Subjects = SubjectList<[Function], ErrorDiag>;
+// floor attributes
+def ComputeKernel : DeclOrTypeAttr {
+  let Spellings = [GNU<"compute_kernel">, CXX11<"","compute_kernel", 200809>];
   let Documentation = [Undocumented];
   let SimpleHandler = 1;
 }
 
+def GraphicsVertexShader : DeclOrTypeAttr {
+  let Spellings = [GNU<"vertex_shader">, CXX11<"","vertex_shader", 200809>];
+  let Documentation = [Undocumented];
+  let SimpleHandler = 1;
+}
+
+def GraphicsFragmentShader : DeclOrTypeAttr {
+  let Spellings = [GNU<"fragment_shader">, CXX11<"","fragment_shader", 200809>];
+  let Documentation = [Undocumented];
+  let SimpleHandler = 1;
+}
+
+def GraphicsTessellationControlShader : DeclOrTypeAttr {
+  let Spellings = [GNU<"tessellation_control_shader">, CXX11<"","tessellation_control_shader", 200809>];
+  let Documentation = [Undocumented];
+  let SimpleHandler = 1;
+}
+
+def GraphicsTessellationEvaluationShader : DeclOrTypeAttr {
+  let Spellings = [GNU<"tessellation_evaluation_shader">, CXX11<"","tessellation_evaluation_shader", 200809>];
+  let Documentation = [Undocumented];
+  let SimpleHandler = 1;
+}
+
+def GraphicsTessellationPatch : InheritableAttr {
+  let Spellings = [CXX11<"","patch", 200809>];
+  let Args = [EnumArgument<"PatchPrimitive", "PatchPrimitiveType",
+                           ["triangle", "quad"],
+                           ["PatchTriangle", "PatchQuad"]>,
+              UnsignedArgument<"ControlPoints">];
+  let Subjects = SubjectList<[Function], ErrorDiag>;
+  let Documentation = [Undocumented];
+}
+
+def RetRange : InheritableAttr {
+  let Spellings = [GNU<"range">, CXX11<"","range", 200809>];
+  let Args = [ExprArgument<"LowerBound">, ExprArgument<"UpperBound">];
+  let Documentation = [Undocumented];
+}
+
+def ImageAccess : Attr {
+  let Spellings = [GNU<"image_read_only">, CXX11<"","image_read_only", 200809>,
+                   GNU<"image_write_only">, CXX11<"","image_write_only", 200809>,
+                   GNU<"image_read_write">, CXX11<"","image_read_write", 200809>];
+  let Accessors = [Accessor<"isReadOnly", [GNU<"image_read_only">,
+										   CXX11<"","image_read_only", 200809>]>,
+                   Accessor<"isReadWrite", [GNU<"image_read_write">,
+											CXX11<"","image_read_write", 200809>]>,
+                   Accessor<"isWriteOnly", [GNU<"image_write_only">,
+											CXX11<"","image_write_only", 200809>]>];
+  let Documentation = [OpenCLAccessDocs];
+}
+
+def PrivateAddressSpace : TypeAttr {
+  let Spellings = [GNU<"private_as">, CXX11<"","private_as", 200809>];
+  let Documentation = [OpenCLAddressSpacePrivateDocs];
+}
+
+def GlobalAddressSpace : TypeAttr {
+  let Spellings = [GNU<"global_as">, CXX11<"","global_as", 200809>];
+  let Documentation = [OpenCLAddressSpaceGlobalDocs];
+}
+
+def LocalAddressSpace : TypeAttr {
+  let Spellings = [GNU<"local_as">, CXX11<"","local_as", 200809>];
+  let Documentation = [OpenCLAddressSpaceLocalDocs];
+}
+
+def ConstantAddressSpace : TypeAttr {
+  let Spellings = [GNU<"constant_as">, CXX11<"","constant_as", 200809>];
+  let Documentation = [OpenCLAddressSpaceConstantDocs];
+}
+
+def GenericAddressSpace : TypeAttr {
+  let Spellings = [GNU<"generic_as">, CXX11<"","generic_as", 200809>];
+  let Documentation = [OpenCLAddressSpaceGenericDocs];
+}
+
+// CUDA address space attrs are not type attrs, so they need to be handled specially
+def CUDAShared : InheritableAttr {
+  let Spellings = [GNU<"local_cuda">, CXX11<"","local_cuda", 200809>];
+  let Subjects = SubjectList<[Var]>;
+  let LangOpts = [CUDA];
+  let Documentation = [Undocumented];
+}
+
+def FloorArgBuffer : DeclOrTypeAttr {
+  let Spellings = [GNU<"floor_arg_buffer">, CXX11<"","floor_arg_buffer", 200809>];
+  let Documentation = [Undocumented];
+}
+
+def CUDAConstant : InheritableAttr {
+  let Spellings = [GNU<"constant_cuda">, CXX11<"","constant_cuda", 200809>];
+  let Subjects = SubjectList<[Var]>;
+  let LangOpts = [CUDA];
+  let Documentation = [Undocumented];
+}
+
+def FloorImageDataType : InheritableAttr {
+  let Spellings = [CXX11<"floor","image_data_type", 200809>];
+  let Args = [TypeArgument<"ImageDataType">];
+  let TemplateDependent = 1;
+  let Documentation = [Undocumented];
+}
+
+def FloorImageFlags : InheritableAttr {
+  let Spellings = [CXX11<"floor","image_flags", 200809>];
+  let Args = [ExprArgument<"ImageFlags">];
+  let TemplateDependent = 1;
+  let AdditionalMembers = [{
+    uint64_t eval_flags = 0;
+    uint64_t getEvalFlags() const {
+      return eval_flags;
+    }
+    void setEvalFlags(uint64_t flags) {
+      eval_flags = flags;
+    }
+    bool isReadOnly() const {
+        return (eval_flags & 0xC00u) == 0x400u;
+    }
+    bool isWriteOnly() const {
+        return (eval_flags & 0xC00u) == 0x800u;
+    }
+    bool isReadWrite() const {
+        return (eval_flags & 0xC00u) == 0xC00u;
+    }
+  }];
+  let Documentation = [Undocumented];
+}
+
+// on aggregate types this signals that they can be converted/coerced to the corresponding clang/llvm vector type
+def VectorCompat : InheritableAttr {
+  let Spellings = [GNU<"vector_compat">, CXX11<"","vector_compat", 200809>];
+  let Documentation = [Undocumented];
+}
+
+// fbo color output location
+def GraphicsFBOColorLocation : InheritableAttr {
+  let Spellings = [GNU<"color">, CXX11<"","color", 200809>];
+  let Args = [ExprArgument<"ColorLocation">];
+  let TemplateDependent = 1;
+  let AdditionalMembers = [{
+  unsigned int eval_location = 0;
+  unsigned int getEvalLocation() const {
+    return eval_location;
+  }
+  void setEvalLocation(unsigned int loc) {
+    eval_location = loc;
+  }
+  }];
+  let Documentation = [Undocumented];
+}
+
+// fbo explicit writable depth with depth type
+def GraphicsFBODepthType : InheritableAttr {
+  let Spellings = [GNU<"depth">, CXX11<"","depth", 200809>];
+  let Args = [EnumArgument<"DepthQualifier", "DepthQualifierType",
+                           ["any", "greater", "less"],
+                           ["FBODepthTypeAny", "FBODepthTypeGreater", "FBODepthTypeLess"]>];
+  let Documentation = [Undocumented];
+}
+
+// vertex output position (used in vertex output structs)
+def GraphicsVertexPosition : InheritableAttr {
+  let Spellings = [GNU<"position">, CXX11<"","position", 200809>];
+  let Documentation = [Undocumented];
+}
+
+// vertex/point output size (used in vertex output structs)
+def GraphicsPointSize : InheritableAttr {
+  let Spellings = [GNU<"point_size">, CXX11<"","point_size", 200809>];
+  let Documentation = [Undocumented];
+}
+
+// stage input (just fragment shader input right now)
+def GraphicsStageInput : Attr {
+  let Spellings = [GNU<"stage_input">, CXX11<"","stage_input", 200809>];
+  let Subjects = SubjectList<[ParmVar], ErrorDiag>;
+  let Documentation = [Undocumented];
+}
+
+// Similar to CUDA, OpenCL attributes do not receive a [[]] spelling because
+// the specification does not expose them with one currently.
 def OpenCLUnrollHint : StmtAttr {
   let Spellings = [GNU<"opencl_unroll_hint">];
   let Subjects = SubjectList<[ForStmt, CXXForRangeStmt, WhileStmt, DoStmt],
@@ -1231,55 +1388,6 @@ def OpenCLIntelReqdSubGroupSize: InheritableAttr {
 
 // This attribute is both a type attribute, and a declaration attribute (for
 // parameter variables).
-def OpenCLAccess : Attr {
-  let Spellings = [Keyword<"__read_only">, Keyword<"read_only">,
-                   Keyword<"__write_only">, Keyword<"write_only">,
-                   Keyword<"__read_write">, Keyword<"read_write">];
-  let Subjects = SubjectList<[ParmVar, TypedefName], ErrorDiag>;
-  let Accessors = [Accessor<"isReadOnly", [Keyword<"__read_only">,
-                                           Keyword<"read_only">]>,
-                   Accessor<"isReadWrite", [Keyword<"__read_write">,
-                                            Keyword<"read_write">]>,
-                   Accessor<"isWriteOnly", [Keyword<"__write_only">,
-                                            Keyword<"write_only">]>];
-  let Documentation = [OpenCLAccessDocs];
-}
-
-def OpenCLPrivateAddressSpace : TypeAttr {
-  let Spellings = [Keyword<"__private">, Keyword<"private">, Clang<"opencl_private">];
-  let Documentation = [OpenCLAddressSpacePrivateDocs];
-}
-
-def OpenCLGlobalAddressSpace : TypeAttr {
-  let Spellings = [Keyword<"__global">, Keyword<"global">, Clang<"opencl_global">];
-  let Documentation = [OpenCLAddressSpaceGlobalDocs];
-}
-
-def OpenCLGlobalDeviceAddressSpace : TypeAttr {
-  let Spellings = [Clang<"opencl_global_device">];
-  let Documentation = [OpenCLAddressSpaceGlobalExtDocs];
-}
-
-def OpenCLGlobalHostAddressSpace : TypeAttr {
-  let Spellings = [Clang<"opencl_global_host">];
-  let Documentation = [OpenCLAddressSpaceGlobalExtDocs];
-}
-
-def OpenCLLocalAddressSpace : TypeAttr {
-  let Spellings = [Keyword<"__local">, Keyword<"local">, Clang<"opencl_local">];
-  let Documentation = [OpenCLAddressSpaceLocalDocs];
-}
-
-def OpenCLConstantAddressSpace : TypeAttr {
-  let Spellings = [Keyword<"__constant">, Keyword<"constant">, Clang<"opencl_constant">];
-  let Documentation = [OpenCLAddressSpaceConstantDocs];
-}
-
-def OpenCLGenericAddressSpace : TypeAttr {
-  let Spellings = [Keyword<"__generic">, Keyword<"generic">, Clang<"opencl_generic">];
-  let Documentation = [OpenCLAddressSpaceGenericDocs];
-}
-
 def OpenCLNoSVM : Attr {
   let Spellings = [GNU<"nosvm">];
   let Subjects = SubjectList<[Var]>;

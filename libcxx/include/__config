@@ -56,6 +56,8 @@
 #  define _LIBCPP_OBJECT_FORMAT_COFF  1
 #elif defined(__wasm__)
 #  define _LIBCPP_OBJECT_FORMAT_WASM  1
+#elif defined(FLOOR_COMPUTE)
+#  define _LIBCPP_OBJECT_FORMAT_FLOOR 1
 #else
    // ... add new file formats here ...
 #endif
@@ -476,11 +478,11 @@ typedef __char32_t char32_t;
 #define _LIBCPP_HAS_OBJC_ARC_WEAK
 #endif
 
-#if __has_extension(blocks)
+#if __has_extension(blocks) && 0 /* we don't want this */
 #  define _LIBCPP_HAS_EXTENSION_BLOCKS
 #endif
 
-#if defined(_LIBCPP_HAS_EXTENSION_BLOCKS) && defined(__APPLE__)
+#if defined(_LIBCPP_HAS_EXTENSION_BLOCKS) && defined(__APPLE__) && 0 /* we don't want this */
 #  define _LIBCPP_HAS_BLOCKS_RUNTIME
 #endif
 

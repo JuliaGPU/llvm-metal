@@ -1545,6 +1545,7 @@ bool CursorVisitor::VisitBuiltinTypeLoc(BuiltinTypeLoc TL) {
   case BuiltinType::OCLClkEvent:
   case BuiltinType::OCLQueue:
   case BuiltinType::OCLReserveID:
+  case BuiltinType::OCLPatchControlPoint:
 #define SVE_TYPE(Name, Id, SingletonId) case BuiltinType::Id:
 #include "clang/Basic/AArch64SVEACLETypes.def"
 #define PPC_VECTOR_TYPE(Name, Id, Size) case BuiltinType::Id:
@@ -5490,7 +5491,7 @@ CXString clang_getCursorKindSpelling(enum CXCursorKind Kind) {
     return cxstring::createRef("attribute(constant)");
   case CXCursor_CUDADeviceAttr:
     return cxstring::createRef("attribute(device)");
-  case CXCursor_CUDAGlobalAttr:
+  case CXCursor_ComputeKernelAttr:
     return cxstring::createRef("attribute(global)");
   case CXCursor_CUDAHostAttr:
     return cxstring::createRef("attribute(host)");

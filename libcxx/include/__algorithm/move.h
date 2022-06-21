@@ -12,7 +12,9 @@
 #include <__config>
 #include <__algorithm/unwrap_iter.h>
 #include <__utility/move.h>
+#if 0
 #include <cstring>
+#endif
 #include <utility>
 #include <type_traits>
 
@@ -54,7 +56,7 @@ __move(_Tp* __first, _Tp* __last, _Up* __result)
 {
     const size_t __n = static_cast<size_t>(__last - __first);
     if (__n > 0)
-        _VSTD::memmove(__result, __first, __n * sizeof(_Up));
+        __builtin_memmove(__result, __first, __n * sizeof(_Up));
     return __result + __n;
 }
 

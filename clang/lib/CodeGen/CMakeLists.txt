@@ -2,6 +2,9 @@ set(LLVM_LINK_COMPONENTS
   Analysis
   BitReader
   BitWriter
+  BitWriter32
+  BitWriter50
+  MetalLib
   Core
   Coroutines
   Coverage
@@ -14,6 +17,7 @@ set(LLVM_LINK_COMPONENTS
   InstCombine
   Instrumentation
   LTO
+  LibFloor
   Linker
   MC
   ObjCARCOpts
@@ -22,6 +26,7 @@ set(LLVM_LINK_COMPONENTS
   ProfileData
   Remarks
   ScalarOpts
+  SPIRVLib
   Support
   Target
   TransformUtils
@@ -63,6 +68,7 @@ add_clang_library(clangCodeGen
   CGOpenMPRuntimeGPU.cpp
   CGOpenMPRuntimeNVPTX.cpp
   CGRecordLayoutBuilder.cpp
+  CGSPIRMetadataAdder.cpp
   CGStmt.cpp
   CGStmtOpenMP.cpp
   CGVTT.cpp

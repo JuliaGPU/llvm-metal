@@ -76,7 +76,8 @@ struct CodeMetrics {
   /// Add information about a block to the current state.
   void analyzeBasicBlock(const BasicBlock *BB, const TargetTransformInfo &TTI,
                          const SmallPtrSetImpl<const Value *> &EphValues,
-                         bool PrepareForLTO = false);
+                         bool PrepareForLTO = false,
+						 const bool allow_duplicate = false);
 
   /// Collect a loop's ephemeral values (those used only by an assume
   /// or similar intrinsics in the loop).

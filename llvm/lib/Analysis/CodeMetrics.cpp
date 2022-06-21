@@ -116,7 +116,8 @@ void CodeMetrics::collectEphemeralValues(
 /// block.
 void CodeMetrics::analyzeBasicBlock(
     const BasicBlock *BB, const TargetTransformInfo &TTI,
-    const SmallPtrSetImpl<const Value *> &EphValues, bool PrepareForLTO) {
+    const SmallPtrSetImpl<const Value *> &EphValues, bool PrepareForLTO,
+    const bool allow_duplicate) {
   ++NumBlocks;
   // Use a proxy variable for NumInsts of type InstructionCost, so that it can
   // use InstructionCost's arithmetic properties such as saturation when this
@@ -170,18 +171,18 @@ void CodeMetrics::analyzeBasicBlock(
     if (isa<ExtractElementInst>(I) || I.getType()->isVectorTy())
       ++NumVectorInsts;
 
-    if (I.getType()->isTokenTy() && I.isUsedOutsideOfBlock(BB))
+    if (!allow_duplicate && I.getType()->isTokenTy() && I.isUsedOutsideOfBlock(BB))
       notDuplicatable = true;
 
     if (const CallInst *CI = dyn_cast<CallInst>(&I)) {
-      if (CI->cannotDuplicate())
+      if (!allow_duplicate && CI->cannotDuplicate())
         notDuplicatable = true;
       if (CI->isConvergent())
         convergent = true;
     }
 
     if (const InvokeInst *InvI = dyn_cast<InvokeInst>(&I))
-      if (InvI->cannotDuplicate())
+      if (!allow_duplicate && InvI->cannotDuplicate())
         notDuplicatable = true;
 
     NumInstsProxy += TTI.getUserCost(&I, TargetTransformInfo::TCK_CodeSize);

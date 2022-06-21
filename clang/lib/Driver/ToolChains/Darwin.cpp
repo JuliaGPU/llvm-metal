@@ -71,6 +71,8 @@ llvm::Triple::ArchType darwin::getArchTypeForMachOArchName(StringRef Str) {
       .Case("nvptx64", llvm::Triple::nvptx64)
       .Case("amdil", llvm::Triple::amdil)
       .Case("spir", llvm::Triple::spir)
+      .Case("spir64", llvm::Triple::spir64)
+      .Case("air64", llvm::Triple::air64)
       .Default(llvm::Triple::UnknownArch);
 }
 
@@ -882,6 +884,8 @@ ToolChain::CXXStdlibType Darwin::GetDefaultCXXStdlibType() const {
 
 /// Darwin provides an ARC runtime starting in MacOS X 10.7 and iOS 5.0.
 ObjCRuntime Darwin::getDefaultObjCRuntime(bool isNonFragile) const {
+  if (getTriple().getArch() == llvm::Triple::ArchType::air64)
+    return ObjCRuntime(ObjCRuntime::FragileMacOSX, TargetVersion);
   if (isTargetWatchOSBased())
     return ObjCRuntime(ObjCRuntime::WatchOS, TargetVersion);
   if (isTargetIOSBased())
@@ -893,6 +897,8 @@ ObjCRuntime Darwin::getDefaultObjCRuntime(bool isNonFragile) const {
 
 /// Darwin provides a blocks runtime starting in MacOS X 10.6 and iOS 3.2.
 bool Darwin::hasBlocksRuntime() const {
+  if (getTriple().getArch() == llvm::Triple::ArchType::air64)
+    return false;
   if (isTargetWatchOSBased())
     return true;
   else if (isTargetIOSBased())
@@ -1043,6 +1049,10 @@ DarwinClang::DarwinClang(const Driver &D, const llvm::Triple &Triple,
     : Darwin(D, Triple, Args) {}
 
 void DarwinClang::addClangWarningOptions(ArgStringList &CC1Args) const {
+  // nothing of interest in here for AIR/Metal
+  if (getTriple().getArch() == llvm::Triple::ArchType::air64)
+    return;
+
   // Always error about undefined 'TARGET_OS_*' macros.
   CC1Args.push_back("-Wundef-prefix=TARGET_OS_");
   CC1Args.push_back("-Werror=undef-prefix");
@@ -1133,6 +1143,9 @@ void DarwinClang::AddLinkARCArgs(const ArgList &Args,
 }
 
 unsigned DarwinClang::GetDefaultDwarfVersion() const {
+  if (getTriple().getArch() == llvm::Triple::ArchType::air64) {
+    return 4; // AIR is always Dwarf 4 (for Metal 2.x)
+  }
   // Default to use DWARF 2 on OS X 10.10 / iOS 8 and lower.
   if ((isTargetMacOSBased() && isMacosxVersionLT(10, 11)) ||
       (isTargetIOSBased() && isIPhoneOSVersionLT(9)))
@@ -2609,6 +2622,8 @@ void MachO::AddLinkRuntimeLibArgs(const ArgList &Args,
 }
 
 bool Darwin::isAlignedAllocationUnavailable() const {
+  if (getTriple().getArch() == llvm::Triple::ArchType::air64) return false;
+
   llvm::Triple::OSType OS;
 
   if (isTargetMacCatalyst())
@@ -3003,6 +3018,9 @@ SanitizerMask Darwin::getSupportedSanitizers() const {
   const bool IsX86_64 = getTriple().getArch() == llvm::Triple::x86_64;
   const bool IsAArch64 = getTriple().getArch() == llvm::Triple::aarch64;
   SanitizerMask Res = ToolChain::getSupportedSanitizers();
+  // no additional ones
+  if (getTriple().getArch() == llvm::Triple::ArchType::air64)
+    return Res;
   Res |= SanitizerKind::Address;
   Res |= SanitizerKind::PointerCompare;
   Res |= SanitizerKind::PointerSubtract;

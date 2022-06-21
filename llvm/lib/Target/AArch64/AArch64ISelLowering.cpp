@@ -5194,6 +5194,12 @@ CCAssignFn *AArch64TargetLowering::CCAssignFnForCall(CallingConv::ID CC,
   case CallingConv::Swift:
   case CallingConv::SwiftTail:
   case CallingConv::Tail:
+  case CallingConv::FLOOR_FUNC:
+  case CallingConv::FLOOR_KERNEL:
+  case CallingConv::FLOOR_VERTEX:
+  case CallingConv::FLOOR_FRAGMENT:
+  case CallingConv::FLOOR_TESS_CONTROL:
+  case CallingConv::FLOOR_TESS_EVAL:
     if (Subtarget->isTargetWindows() && IsVarArg)
       return CC_AArch64_Win64_VarArg;
     if (!Subtarget->isTargetDarwin())
@@ -6306,7 +6312,7 @@ AArch64TargetLowering::LowerCall(CallLoweringInfo &CLI,
     }
   } else if (auto *S = dyn_cast<ExternalSymbolSDNode>(Callee)) {
     if (getTargetMachine().getCodeModel() == CodeModel::Large &&
-        Subtarget->isTargetMachO()) {
+        (Subtarget->isTargetMachO() || Subtarget->isTargetHostCompute())) {
       const char *Sym = S->getSymbol();
       Callee = DAG.getTargetExternalSymbol(Sym, PtrVT, AArch64II::MO_GOT);
       Callee = DAG.getNode(AArch64ISD::LOADgot, DL, PtrVT, Callee);

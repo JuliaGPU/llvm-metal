@@ -376,6 +376,12 @@ bool Declarator::isDeclarationOfFunction() const {
     case TST_BFloat16:
 #define GENERIC_IMAGE_TYPE(ImgType, Id) case TST_##ImgType##_t:
 #include "clang/Basic/OpenCLImageTypes.def"
+    case TST_sampler_t:
+    case TST_event_t:
+    case TST_queue_t:
+    case TST_clk_event_t:
+    case TST_reserve_id_t:
+    case TST_patch_control_point_t:
       return false;
 
     case TST_decltype_auto:
@@ -584,6 +590,12 @@ const char *DeclSpec::getSpecifierName(DeclSpec::TST T,
   case DeclSpec::TST_##ImgType##_t: \
     return #ImgType "_t";
 #include "clang/Basic/OpenCLImageTypes.def"
+  case DeclSpec::TST_sampler_t:   return "sampler_t";
+  case DeclSpec::TST_event_t:     return "event_t";
+  case DeclSpec::TST_queue_t:     return "queue_t";
+  case DeclSpec::TST_clk_event_t: return "clk_event_t";
+  case DeclSpec::TST_reserve_id_t: return "reserve_id_t";
+  case DeclSpec::TST_patch_control_point_t: return "__patch_control_point_t";
   case DeclSpec::TST_error:       return "(error)";
   }
   llvm_unreachable("Unknown typespec!");

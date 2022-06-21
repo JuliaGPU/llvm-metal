@@ -102,8 +102,10 @@ static Constant *foldConstVectorToAPInt(APInt &Result, Type *DestTy,
 /// This always returns a non-null constant, but it may be a
 /// ConstantExpr if unfoldable.
 Constant *FoldBitCast(Constant *C, Type *DestTy, const DataLayout &DL) {
+#if 0 // TODO/NOTE: disabled for now
   assert(CastInst::castIsValid(Instruction::BitCast, C, DestTy) &&
          "Invalid constantexpr bitcast!");
+#endif
 
   // Catch the obvious splat cases.
   if (C->isNullValue() && !DestTy->isX86_MMXTy() && !DestTy->isX86_AMXTy())

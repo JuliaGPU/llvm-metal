@@ -364,6 +364,8 @@ public:
     // DO NOTHING by default.
     return false;
   }
+
+  static bool TCGIisAggregateTypeForABI(QualType T);
 };
 
 } // namespace CodeGen

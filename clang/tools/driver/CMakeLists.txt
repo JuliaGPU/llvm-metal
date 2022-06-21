@@ -7,6 +7,7 @@ set( LLVM_LINK_COMPONENTS
   AggressiveInstCombine
   InstCombine
   Instrumentation
+  LibFloor
   MC
   MCParser
   ObjCARCOpts

@@ -269,6 +269,31 @@ __sort(_RandomAccessIterator __first, _RandomAccessIterator __last, _Compare __c
     typedef typename iterator_traits<_RandomAccessIterator>::value_type value_type;
     const difference_type __limit = is_trivially_copy_constructible<value_type>::value &&
                                     is_trivially_copy_assignable<value_type>::value ? 30 : 6;
+#if 1
+    // compute note: keep the special cases if len <= 5, but always fallback to using
+    //               __insertion_sort_3 for len > 5 as it doesn't require recursion
+    difference_type __len = __last - __first;
+    switch (__len)
+    {
+    case 0:
+    case 1:
+        return;
+    case 2:
+        if (__comp(*--__last, *__first))
+            swap(*__first, *__last);
+        return;
+    case 3:
+        _VSTD::__sort3<_Compare>(__first, __first+1, --__last, __comp);
+        return;
+    case 4:
+        _VSTD::__sort4<_Compare>(__first, __first+1, __first+2, --__last, __comp);
+        return;
+    case 5:
+        _VSTD::__sort5<_Compare>(__first, __first+1, __first+2, __first+3, --__last, __comp);
+        return;
+    }
+    _VSTD::__insertion_sort_3<_Compare>(__first, __last, __comp);
+#else
     while (true)
     {
     __restart:
@@ -451,6 +476,7 @@ __sort(_RandomAccessIterator __first, _RandomAccessIterator __last, _Compare __c
             __last = __i;
         }
     }
+#endif
 }
 
 template <class _Compare, class _Tp>
@@ -462,6 +488,7 @@ __sort(_Tp** __first, _Tp** __last, __less<_Tp*>&)
     _VSTD::__sort<__less<uintptr_t>&, uintptr_t*>((uintptr_t*)__first, (uintptr_t*)__last, __comp);
 }
 
+#if 0
 _LIBCPP_EXTERN_TEMPLATE(_LIBCPP_FUNC_VIS void __sort<__less<char>&, char*>(char*, char*, __less<char>&))
 #ifndef _LIBCPP_HAS_NO_WIDE_CHARACTERS
 _LIBCPP_EXTERN_TEMPLATE(_LIBCPP_FUNC_VIS void __sort<__less<wchar_t>&, wchar_t*>(wchar_t*, wchar_t*, __less<wchar_t>&))
@@ -499,6 +526,7 @@ _LIBCPP_EXTERN_TEMPLATE(_LIBCPP_FUNC_VIS bool __insertion_sort_incomplete<__less
 _LIBCPP_EXTERN_TEMPLATE(_LIBCPP_FUNC_VIS bool __insertion_sort_incomplete<__less<long double>&, long double*>(long double*, long double*, __less<long double>&))
 
 _LIBCPP_EXTERN_TEMPLATE(_LIBCPP_FUNC_VIS unsigned __sort5<__less<long double>&, long double*>(long double*, long double*, long double*, long double*, long double*, __less<long double>&))
+#endif
 
 template <class _RandomAccessIterator, class _Compare>
 inline _LIBCPP_INLINE_VISIBILITY _LIBCPP_CONSTEXPR_AFTER_CXX17

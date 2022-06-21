@@ -649,7 +649,9 @@ template <class BidirectionalIterator, class Compare>
 #include <__debug>
 #include <__bits> // __libcpp_clz
 #include <cstddef>
+#if 0
 #include <cstring>
+#endif
 #include <functional>
 #include <initializer_list>
 #include <utility> // needed to provide swap_ranges.

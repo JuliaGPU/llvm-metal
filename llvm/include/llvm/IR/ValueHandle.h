@@ -116,7 +116,7 @@ protected:
 public:
   // Callbacks made from Value.
   static void ValueIsDeleted(Value *V);
-  static void ValueIsRAUWd(Value *Old, Value *New);
+  static void ValueIsRAUWd(Value *Old, Value *New, const bool AllowASChange = false);
 
 private:
   // Internal implementation details.

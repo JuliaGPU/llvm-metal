@@ -29,7 +29,7 @@ public:
   VectorCombinePass(bool ScalarizationOnly = false)
       : ScalarizationOnly(ScalarizationOnly) {}
 
-  PreservedAnalyses run(Function &F, FunctionAnalysisManager &);
+  PreservedAnalyses run(Function &F, FunctionAnalysisManager &, bool isVulkan = false);
 };
 }
 #endif // LLVM_TRANSFORMS_VECTORIZE_VECTORCOMBINE_H

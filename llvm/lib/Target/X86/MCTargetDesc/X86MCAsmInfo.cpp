@@ -100,6 +100,12 @@ X86ELFMCAsmInfo::X86ELFMCAsmInfo(const Triple &T) {
 
   // Exceptions handling
   ExceptionsType = ExceptionHandling::DwarfCFI;
+
+  // host-compute:
+  // * don't emit .comment ident section
+  if (T.getEnvironment() == Triple::EnvironmentType::FloorHostCompute) {
+    HasIdentDirective = false;
+  }
 }
 
 const MCExpr *

@@ -112,7 +112,11 @@ template <size_t I, class T, size_t N> const T&& get(const array<T, N>&&) noexce
 #include <__debug>
 #include <__tuple>
 #include <algorithm>
+#if 0
 #include <cstdlib> // for _LIBCPP_UNREACHABLE
+#else
+#define _LIBCPP_UNREACHABLE __builtin_unreachable
+#endif
 #include <iterator>
 #include <stdexcept>
 #include <type_traits>

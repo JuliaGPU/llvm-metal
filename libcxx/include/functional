@@ -520,11 +520,15 @@ POLICY:  For non-variadic implementations, the number of arguments is limited
 #include <__functional/unwrap_ref.h>
 #include <__utility/forward.h>
 #include <concepts>
+#if 0
 #include <exception>
+#endif
 #include <memory>
 #include <tuple>
 #include <type_traits>
+#if 0
 #include <typeinfo>
+#endif
 #include <utility>
 #include <version>
 

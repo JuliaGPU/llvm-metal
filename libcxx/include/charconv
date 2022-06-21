@@ -408,7 +408,7 @@ __sign_combinator(_It __first, _It __last, _Tp& __value, _Fn __f, _Ts... __args)
         if (__x <= __complement(__to_unsigned_like(__tl::min())))
         {
             __x = __complement(__x);
-            _VSTD::memcpy(&__value, &__x, sizeof(__x));
+            __builtin_memcpy(&__value, &__x, sizeof(__x));
             return __r;
         }
     }

@@ -89,7 +89,9 @@ void  operator delete[](void* ptr, void*) noexcept;
 #include <__availability>
 #include <__config>
 #include <cstddef>
+#if 0
 #include <cstdlib>
+#endif
 #include <exception>
 #include <type_traits>
 #include <version>
@@ -121,7 +123,7 @@ namespace std  // purposefully not using versioning namespace
 
 #if !defined(_LIBCPP_ABI_VCRUNTIME)
 struct _LIBCPP_TYPE_VIS nothrow_t { explicit nothrow_t() = default; };
-extern _LIBCPP_FUNC_VIS const nothrow_t nothrow;
+_LIBCPP_FUNC_VIS static const nothrow_t nothrow;
 
 class _LIBCPP_EXCEPTION_ABI bad_alloc
     : public exception
@@ -129,7 +131,7 @@ class _LIBCPP_EXCEPTION_ABI bad_alloc
 public:
     bad_alloc() _NOEXCEPT;
     virtual ~bad_alloc() _NOEXCEPT;
-    virtual const char* what() const _NOEXCEPT;
+    virtual constant const char* what() const _NOEXCEPT;
 };
 
 class _LIBCPP_EXCEPTION_ABI bad_array_new_length
@@ -138,7 +140,7 @@ class _LIBCPP_EXCEPTION_ABI bad_array_new_length
 public:
     bad_array_new_length() _NOEXCEPT;
     virtual ~bad_array_new_length() _NOEXCEPT;
-    virtual const char* what() const _NOEXCEPT;
+    virtual constant const char* what() const _NOEXCEPT;
 };
 
 typedef void (*new_handler)();
@@ -155,7 +157,7 @@ void __throw_bad_array_new_length()
 #ifndef _LIBCPP_NO_EXCEPTIONS
     throw bad_array_new_length();
 #else
-    _VSTD::abort();
+    __builtin_unreachable();
 #endif
 }
 
@@ -185,7 +187,7 @@ inline constexpr destroying_delete_t destroying_delete{};
 #define _THROW_BAD_ALLOC
 #endif
 
-#if !defined(_LIBCPP_ABI_VCRUNTIME)
+#if !defined(_LIBCPP_ABI_VCRUNTIME) && 0
 
 _LIBCPP_NODISCARD_AFTER_CXX17 _LIBCPP_OVERRIDABLE_FUNC_VIS void* operator new(std::size_t __sz) _THROW_BAD_ALLOC;
 _LIBCPP_NODISCARD_AFTER_CXX17 _LIBCPP_OVERRIDABLE_FUNC_VIS void* operator new(std::size_t __sz, const std::nothrow_t&) _NOEXCEPT _LIBCPP_NOALIAS;
@@ -320,6 +322,7 @@ inline _LIBCPP_INLINE_VISIBILITY void __libcpp_deallocate_unsized(void* __ptr, s
 // Returns the allocated memory, or `nullptr` on failure.
 inline _LIBCPP_INLINE_VISIBILITY
 void* __libcpp_aligned_alloc(std::size_t __alignment, std::size_t __size) {
+#if 0 // not supported
 #if defined(_LIBCPP_MSVCRT_LIKE)
   return ::_aligned_malloc(__size, __alignment);
 #else
@@ -328,14 +331,21 @@ void* __libcpp_aligned_alloc(std::size_t __alignment, std::size_t __size) {
   // If posix_memalign fails, __result is unmodified so we still return `nullptr`.
   return __result;
 #endif
+#else
+	return nullptr;
+#endif
 }
 
 inline _LIBCPP_INLINE_VISIBILITY
 void __libcpp_aligned_free(void* __ptr) {
+#if 0 // not supported
 #if defined(_LIBCPP_MSVCRT_LIKE)
   ::_aligned_free(__ptr);
 #else
   ::free(__ptr);
+#endif
+#else
+	(void)__ptr;
 #endif
 }
 #endif // !_LIBCPP_HAS_NO_ALIGNED_ALLOCATION

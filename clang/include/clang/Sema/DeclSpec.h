@@ -298,6 +298,12 @@ public:
 #define GENERIC_IMAGE_TYPE(ImgType, Id) \
   static const TST TST_##ImgType##_t = clang::TST_##ImgType##_t;
 #include "clang/Basic/OpenCLImageTypes.def"
+  static const TST TST_sampler_t = clang::TST_sampler_t;
+  static const TST TST_event_t = clang::TST_event_t;
+  static const TST TST_queue_t = clang::TST_queue_t;
+  static const TST TST_clk_event_t = clang::TST_clk_event_t;
+  static const TST TST_reserve_id_t = clang::TST_reserve_id_t;
+  static const TST TST_patch_control_point_t = clang::TST_patch_control_point_t;
   static const TST TST_error = clang::TST_error;
 
   // type-qualifiers

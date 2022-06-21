@@ -15,6 +15,7 @@
 #define _LIBCPP_INTTYPES_H
 #endif // _STD_TYPES_T
 
+#if 0 // we don't want this
 /*
     inttypes.h synopsis
 
@@ -258,5 +259,7 @@ uintmax_t wcstoumax(const wchar_t* restrict nptr, wchar_t** restrict endptr, int
 #undef imaxdiv
 
 #endif // __cplusplus
+
+#endif
 
 #endif // _LIBCPP_INTTYPES_H

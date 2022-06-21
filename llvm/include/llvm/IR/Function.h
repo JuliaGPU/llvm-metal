@@ -178,6 +178,13 @@ public:
     return cast<FunctionType>(getValueType());
   }
 
+  // function type is separate from value type, so mutateType will no longer change it
+  // -> need a new function to specifically mutate the function type
+  void mutateFunctionType(FunctionType* NewTy) {
+    // NOTE: ValueType is now part of GlobalValue (and there is still a separate Ty in Value)
+    ValueType = NewTy;
+  }
+
   /// Returns the type of the ret val.
   Type *getReturnType() const { return getFunctionType()->getReturnType(); }
 

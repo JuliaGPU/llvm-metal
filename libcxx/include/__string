@@ -349,7 +349,7 @@ struct _LIBCPP_TEMPLATE_VIS char_traits<char>
         {
             return __libcpp_is_constant_evaluated()
                        ? _VSTD::__move_constexpr(__s1, __s2, __n)
-                       : __n == 0 ? __s1 : (char_type*)_VSTD::memmove(__s1, __s2, __n);
+                       : __n == 0 ? __s1 : (char_type*)__builtin_memmove(__s1, __s2, __n);
         }
     static inline _LIBCPP_CONSTEXPR_AFTER_CXX17
     char_type* copy(char_type* __s1, const char_type* __s2, size_t __n) _NOEXCEPT
@@ -359,14 +359,14 @@ struct _LIBCPP_TEMPLATE_VIS char_traits<char>
             }
             return __libcpp_is_constant_evaluated()
                        ? _VSTD::__copy_constexpr(__s1, __s2, __n)
-                       : __n == 0 ? __s1 : (char_type*)_VSTD::memcpy(__s1, __s2, __n);
+                       : __n == 0 ? __s1 : (char_type*)__builtin_memcpy(__s1, __s2, __n);
         }
     static inline _LIBCPP_CONSTEXPR_AFTER_CXX17
     char_type* assign(char_type* __s, size_t __n, char_type __a) _NOEXCEPT
         {
             return __libcpp_is_constant_evaluated()
                        ? _VSTD::__assign_constexpr(__s, __n, __a)
-                       : __n == 0 ? __s : (char_type*)_VSTD::memset(__s, to_int_type(__a), __n);
+                       : __n == 0 ? __s : (char_type*)__builtin_memset(__s, to_int_type(__a), __n);
         }
 
     static inline _LIBCPP_CONSTEXPR int_type  not_eof(int_type __c) _NOEXCEPT
@@ -390,7 +390,7 @@ char_traits<char>::compare(const char_type* __s1, const char_type* __s2, size_t 
 #if __has_feature(cxx_constexpr_string_builtins)
     return __builtin_memcmp(__s1, __s2, __n);
 #elif _LIBCPP_STD_VER <= 14
-    return _VSTD::memcmp(__s1, __s2, __n);
+    return __builtin_memcmp(__s1, __s2, __n);
 #else
     for (; __n; --__n, ++__s1, ++__s2)
     {
@@ -412,7 +412,7 @@ char_traits<char>::find(const char_type* __s, size_t __n, const char_type& __a) 
 #if __has_feature(cxx_constexpr_string_builtins)
     return __builtin_char_memchr(__s, to_int_type(__a), __n);
 #elif _LIBCPP_STD_VER <= 14
-    return (const char_type*) _VSTD::memchr(__s, to_int_type(__a), __n);
+    return (const char_type*) __builtin_memchr(__s, to_int_type(__a), __n);
 #else
     for (; __n; --__n)
     {
@@ -589,7 +589,7 @@ struct _LIBCPP_TEMPLATE_VIS char_traits<char8_t>
         {
             return __libcpp_is_constant_evaluated()
                        ? _VSTD::__move_constexpr(__s1, __s2, __n)
-                       : __n == 0 ? __s1 : (char_type*)_VSTD::memmove(__s1, __s2, __n);
+                       : __n == 0 ? __s1 : (char_type*)__builtin_memmove(__s1, __s2, __n);
         }
 
     static _LIBCPP_CONSTEXPR_AFTER_CXX17
@@ -600,7 +600,7 @@ struct _LIBCPP_TEMPLATE_VIS char_traits<char8_t>
             }
             return __libcpp_is_constant_evaluated()
                        ? _VSTD::__copy_constexpr(__s1, __s2, __n)
-                       : __n == 0 ? __s1 : (char_type*)_VSTD::memcpy(__s1, __s2, __n);
+                       : __n == 0 ? __s1 : (char_type*)__builtin_memcpy(__s1, __s2, __n);
         }
 
     static _LIBCPP_CONSTEXPR_AFTER_CXX17
@@ -608,7 +608,7 @@ struct _LIBCPP_TEMPLATE_VIS char_traits<char8_t>
         {
             return __libcpp_is_constant_evaluated()
                        ? _VSTD::__assign_constexpr(__s, __n, __a)
-                       : __n == 0 ? __s : (char_type*)_VSTD::memset(__s, to_int_type(__a), __n);
+                       : __n == 0 ? __s : (char_type*)__builtin_memset(__s, to_int_type(__a), __n);
         }
 
     static inline constexpr int_type  not_eof(int_type __c) noexcept

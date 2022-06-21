@@ -33,7 +33,7 @@ uninitialized_copy(_InputIterator __f, _InputIterator __l, _ForwardIterator __r)
     {
 #endif
         for (; __f != __l; ++__f, (void) ++__r)
-            ::new ((void*)_VSTD::addressof(*__r)) value_type(*__f);
+            ::new ((void*)__builtin_addressof(*__r)) value_type(*__f);
 #ifndef _LIBCPP_NO_EXCEPTIONS
     }
     catch (...)
@@ -57,7 +57,7 @@ uninitialized_copy_n(_InputIterator __f, _Size __n, _ForwardIterator __r)
     {
 #endif
         for (; __n > 0; ++__f, (void) ++__r, (void) --__n)
-            ::new ((void*)_VSTD::addressof(*__r)) value_type(*__f);
+            ::new ((void*)__builtin_addressof(*__r)) value_type(*__f);
 #ifndef _LIBCPP_NO_EXCEPTIONS
     }
     catch (...)
@@ -81,7 +81,7 @@ uninitialized_fill(_ForwardIterator __f, _ForwardIterator __l, const _Tp& __x)
     {
 #endif
         for (; __f != __l; ++__f)
-            ::new ((void*)_VSTD::addressof(*__f)) value_type(__x);
+            ::new ((void*)__builtin_addressof(*__f)) value_type(__x);
 #ifndef _LIBCPP_NO_EXCEPTIONS
     }
     catch (...)
@@ -104,7 +104,7 @@ uninitialized_fill_n(_ForwardIterator __f, _Size __n, const _Tp& __x)
     {
 #endif
         for (; __n > 0; ++__f, (void) --__n)
-            ::new ((void*)_VSTD::addressof(*__f)) value_type(__x);
+            ::new ((void*)__builtin_addressof(*__f)) value_type(__x);
 #ifndef _LIBCPP_NO_EXCEPTIONS
     }
     catch (...)
@@ -128,7 +128,7 @@ void uninitialized_default_construct(_ForwardIterator __first, _ForwardIterator 
     try {
 #endif
     for (; __idx != __last; ++__idx)
-        ::new ((void*)_VSTD::addressof(*__idx)) _Vt;
+        ::new ((void*)__builtin_addressof(*__idx)) _Vt;
 #ifndef _LIBCPP_NO_EXCEPTIONS
     } catch (...) {
         _VSTD::destroy(__first, __idx);
@@ -146,7 +146,7 @@ _ForwardIterator uninitialized_default_construct_n(_ForwardIterator __first, _Si
     try {
 #endif
     for (; __n > 0; ++__idx, (void) --__n)
-        ::new ((void*)_VSTD::addressof(*__idx)) _Vt;
+        ::new ((void*)__builtin_addressof(*__idx)) _Vt;
     return __idx;
 #ifndef _LIBCPP_NO_EXCEPTIONS
     } catch (...) {
@@ -166,7 +166,7 @@ void uninitialized_value_construct(_ForwardIterator __first, _ForwardIterator __
     try {
 #endif
     for (; __idx != __last; ++__idx)
-        ::new ((void*)_VSTD::addressof(*__idx)) _Vt();
+        ::new ((void*)__builtin_addressof(*__idx)) _Vt();
 #ifndef _LIBCPP_NO_EXCEPTIONS
     } catch (...) {
         _VSTD::destroy(__first, __idx);
@@ -184,7 +184,7 @@ _ForwardIterator uninitialized_value_construct_n(_ForwardIterator __first, _Size
     try {
 #endif
     for (; __n > 0; ++__idx, (void) --__n)
-        ::new ((void*)_VSTD::addressof(*__idx)) _Vt();
+        ::new ((void*)__builtin_addressof(*__idx)) _Vt();
     return __idx;
 #ifndef _LIBCPP_NO_EXCEPTIONS
     } catch (...) {
@@ -204,7 +204,7 @@ _ForwardIt uninitialized_move(_InputIt __first, _InputIt __last, _ForwardIt __fi
     try {
 #endif
     for (; __first != __last; ++__idx, (void) ++__first)
-        ::new ((void*)_VSTD::addressof(*__idx)) _Vt(_VSTD::move(*__first));
+        ::new ((void*)__builtin_addressof(*__idx)) _Vt(_VSTD::move(*__first));
     return __idx;
 #ifndef _LIBCPP_NO_EXCEPTIONS
     } catch (...) {
@@ -224,7 +224,7 @@ uninitialized_move_n(_InputIt __first, _Size __n, _ForwardIt __first_res) {
     try {
 #endif
     for (; __n > 0; ++__idx, (void) ++__first, --__n)
-        ::new ((void*)_VSTD::addressof(*__idx)) _Vt(_VSTD::move(*__first));
+        ::new ((void*)__builtin_addressof(*__idx)) _Vt(_VSTD::move(*__first));
     return {__first, __idx};
 #ifndef _LIBCPP_NO_EXCEPTIONS
     } catch (...) {

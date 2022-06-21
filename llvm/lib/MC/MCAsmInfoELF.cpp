@@ -21,6 +21,10 @@ using namespace llvm;
 void MCAsmInfoELF::anchor() {}
 
 MCSection *MCAsmInfoELF::getNonexecutableStackSection(MCContext &Ctx) const {
+  if (Ctx.getTargetTriple().getEnvironment() == Triple::EnvironmentType::FloorHostCompute) {
+    // we don't want to emit this
+    return nullptr;
+  }
   return Ctx.getELFSection(".note.GNU-stack", ELF::SHT_PROGBITS, 0);
 }
 

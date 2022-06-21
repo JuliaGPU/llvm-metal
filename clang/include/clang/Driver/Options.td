@@ -1506,7 +1506,7 @@ defm jump_tables : BoolFOption<"jump-tables",
   NegFlag<SetTrue, [CC1Option], "Do not use">, PosFlag<SetFalse, [], "Use">,
   BothFlags<[], " jump tables for lowering switches">>;
 defm force_enable_int128 : BoolFOption<"force-enable-int128",
-  TargetOpts<"ForceEnableInt128">, DefaultFalse,
+  TargetOpts<"ForceEnableInt128">, DefaultTrue,
   PosFlag<SetTrue, [CC1Option], "Enable">, NegFlag<SetFalse, [], "Disable">,
   BothFlags<[], " support for int128_t type">>;
 defm keep_static_consts : BoolFOption<"keep-static-consts",
@@ -5469,6 +5469,16 @@ def emit_pch : Flag<["-"], "emit-pch">,
   HelpText<"Generate pre-compiled header file">;
 def emit_llvm_bc : Flag<["-"], "emit-llvm-bc">,
   HelpText<"Build ASTs then convert to LLVM, emit .bc file">;
+def emit_llvm_bc_32 : Flag<["-"], "llvm-bc-32">,
+  HelpText<"Output LLVM 3.2 compatible bitcode">;
+def emit_llvm_bc_50 : Flag<["-"], "llvm-bc-50">,
+  HelpText<"Output LLVM 5.0 compatible bitcode">;
+def emit_spirv : Flag<["-"], "emit-spirv">,
+  HelpText<"Build ASTs then convert to LLVM, then convert to SPIR-V, emit .spv file">;
+def emit_spirv_container : Flag<["-"], "emit-spirv-container">,
+  HelpText<"Build ASTs then convert to LLVM, then convert to multiple SPIR-V modules, emit .spvc file">;
+def emit_metallib : Flag<["-"], "emit-metallib">,
+  HelpText<"Builds Metal/AIR bitcode and puts it in a .metallib file">;
 def emit_llvm_only : Flag<["-"], "emit-llvm-only">,
   HelpText<"Build ASTs and convert to LLVM, discarding output">;
 def emit_codegen_only : Flag<["-"], "emit-codegen-only">,
@@ -5832,12 +5842,31 @@ def disable_pragma_debug_crash : Flag<["-"], "disable-pragma-debug-crash">,
   MarshallingInfoFlag<PreprocessorOpts<"DisablePragmaDebugCrash">>;
 
 //===----------------------------------------------------------------------===//
+// libfloor Options (applying to OpenCL, CUDA, Metal and Vulkan)
+//===----------------------------------------------------------------------===//
+
+def floor_function_info : Joined<["-"], "floor-function-info=">,
+  HelpText<"floor function info output file">;
+def floor_image_capabilities : Joined<["-"], "floor-image-capabilities=">,
+  HelpText<"image read and write capabilities">;
+
+//===----------------------------------------------------------------------===//
 // OpenCL Options
 //===----------------------------------------------------------------------===//
 
 def cl_ext_EQ : CommaJoined<["-"], "cl-ext=">,
   HelpText<"OpenCL only. Enable or disable OpenCL extensions. The argument is a comma-separated sequence of one or more extension names, each prefixed by '+' or '-'.">,
   MarshallingInfoStringVector<TargetOpts<"OpenCLExtensionsAsWritten">>;
+
+// SPIR generator options
+def cl_spir_compile_options : Separate<["-"], "cl-spir-compile-options">,
+  HelpText<"SPIR compilation options to record in metadata">;
+def cl_sampler_type : Separate<["-"], "cl-sampler-type">,
+  HelpText<"OpenCL only. Specify type of sampler to emit. Valid values: \"opaque\"(default), \"i32\"">;
+def cl_verify_spir : Flag<["-"], "cl-verify-spir">,
+  HelpText<"OpenCL/SPIR only. Runs the Khronos SPIR verifier on the final LLVM IR.">;
+def cl_spir_intel_workarounds : Flag<["-"], "cl-spir-intel-workarounds">,
+  HelpText<"Enable Intel SPIR specific fixes and workarounds">;
 
 //===----------------------------------------------------------------------===//
 // CUDA Options
@@ -5855,6 +5884,41 @@ def fcuda_allow_variadic_functions : Flag<["-"], "fcuda-allow-variadic-functions
 def fno_cuda_host_device_constexpr : Flag<["-"], "fno-cuda-host-device-constexpr">,
   HelpText<"Don't treat unattributed constexpr functions as __host__ __device__.">,
   MarshallingInfoNegativeFlag<LangOpts<"CUDAHostDeviceConstexpr">>;
+
+//===----------------------------------------------------------------------===//
+// AIR/Metal Options
+//===----------------------------------------------------------------------===//
+
+def metal_intel_workarounds : Flag<["-"], "metal-intel-workarounds">,
+  HelpText<"Enable Intel GPU specific fixes and workarounds">;
+def metal_nvidia_workarounds : Flag<["-"], "metal-nvidia-workarounds">,
+  HelpText<"Enable Nvidia GPU specific fixes and workarounds">;
+def metal_no_array_image : Flag<["-"], "metal-no-array-image">,
+  HelpText<"Disables native support for array of images">;
+def metal_soft_printf : Flag<["-"], "metal-soft-printf">,
+  HelpText<"Enables support of software printf emulation">;
+
+//===----------------------------------------------------------------------===//
+// Vulkan Options
+//===----------------------------------------------------------------------===//
+
+def vulkan_iub_size_EQ : Joined<["-"], "vulkan-iub-size=">,
+  HelpText<"Sets the Vulkan inline uniform block size">;
+def vulkan_iub_count_EQ : Joined<["-"], "vulkan-iub-count=">,
+  HelpText<"Sets the Vulkan inline uniform block count">;
+def vulkan_llvm_pre_structurization_pass : Flag<["-"], "vulkan-llvm-pre-structurization-pass">,
+  HelpText<"Enable LLVM CFG structurization pass prior to actual structurization">;
+def vulkan_soft_printf : Flag<["-"], "vulkan-soft-printf">,
+  HelpText<"Enables support of software printf emulation">;
+
+//===----------------------------------------------------------------------===//
+// Graphics Options
+//===----------------------------------------------------------------------===//
+
+def graphics_primitive_id : Flag<["-"], "graphics-primitive-id">,
+  HelpText<"Enables support for primitive id query in fragment shaders">;
+def graphics_barycentric_coord : Flag<["-"], "graphics-barycentric-coord">,
+  HelpText<"Enables support for barycentric coordinate query in fragment shaders">;
 
 //===----------------------------------------------------------------------===//
 // OpenMP Options

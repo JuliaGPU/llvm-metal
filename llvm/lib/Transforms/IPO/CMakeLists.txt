@@ -23,6 +23,7 @@ add_llvm_component_library(LLVMipo
   IPO.cpp
   IROutliner.cpp
   InferFunctionAttrs.cpp
+  InlineEverything.cpp
   InlineSimple.cpp
   Inliner.cpp
   Internalize.cpp
@@ -64,9 +65,11 @@ add_llvm_component_library(LLVMipo
   InstCombine
   IRReader
   Linker
+  LibFloor
   Object
   ProfileData
   Scalar
+  SPIRVerifier
   Support
   TransformUtils
   Vectorize

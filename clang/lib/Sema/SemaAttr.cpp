@@ -1106,6 +1106,7 @@ void Sema::ActOnPragmaFPContract(SourceLocation Loc,
     break;
   case LangOptions::FPM_Off:
     NewFPFeatures.setDisallowFPContract();
+    Context.disableFPContract();
     break;
   case LangOptions::FPM_FastHonorPragmas:
     llvm_unreachable("Should not happen");

@@ -31,8 +31,10 @@ enum OpenCLVersionID : unsigned int {
   OCL_C_11 = 0x2,
   OCL_C_12 = 0x4,
   OCL_C_20 = 0x8,
-  OCL_C_30 = 0x10,
-  OCL_C_ALL = 0x1f,
+  OCL_C_21 = 0x10,
+  OCL_C_22 = 0x20,
+  OCL_C_30 = 0x40,
+  OCL_C_ALL = OCL_C_10 | OCL_C_11 | OCL_C_12 | OCL_C_20 | OCL_C_21 | OCL_C_22 | OCL_C_30,
   OCL_C_11P = OCL_C_ALL ^ OCL_C_10,              // OpenCL C 1.1+
   OCL_C_12P = OCL_C_ALL ^ (OCL_C_10 | OCL_C_11), // OpenCL C 1.2+
 };
@@ -49,6 +51,10 @@ static inline OpenCLVersionID encodeOpenCLVersion(unsigned OpenCLVersion) {
     return OCL_C_12;
   case 200:
     return OCL_C_20;
+  case 210:
+    return OCL_C_21;
+  case 220:
+    return OCL_C_22;
   case 300:
     return OCL_C_30;
   }

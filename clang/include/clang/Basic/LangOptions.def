@@ -219,6 +219,11 @@ ENUM_LANGOPT(DefaultCallingConv, DefaultCallingConvention, 3, DCC_None, "default
 
 LANGOPT(ShortEnums        , 1, 0, "short enum types")
 
+LANGOPT(Metal             , 1, 0, "Metal")
+LANGOPT(MetalVersion      , 32, 200, "Metal version")
+LANGOPT(Vulkan            , 1, 0, "Vulkan")
+LANGOPT(VulkanVersion     , 32, 120, "Vulkan version")
+LANGOPT(FloorHostCompute  , 1, 0, "floor host-compute")
 LANGOPT(OpenCL            , 1, 0, "OpenCL")
 LANGOPT(OpenCLVersion     , 32, 0, "OpenCL C version")
 LANGOPT(OpenCLCPlusPlus   , 1, 0, "C++ for OpenCL")
@@ -296,6 +301,8 @@ LANGOPT(FastRelaxedMath , 1, 0, "OpenCL fast relaxed math")
 BENIGN_LANGOPT(CLNoSignedZero , 1, 0, "Permit Floating Point optimization without regard to signed zeros")
 COMPATIBLE_LANGOPT(CLUnsafeMath , 1, 0, "Unsafe Floating Point Math")
 COMPATIBLE_LANGOPT(CLFiniteMathOnly , 1, 0, "__FINITE_MATH_ONLY__ predefined macro")
+LANGOPT(CLSamplerOpaque, 1, 0, "Emit sampler as a pointer to opaque structure")
+LANGOPT(CLVerifySPIR , 1, 0, "cl-verify-spir flag used")
 /// FP_CONTRACT mode (on/off/fast).
 BENIGN_ENUM_LANGOPT(DefaultFPContractMode, FPModeKind, 2, FPM_Off, "FP contraction type")
 COMPATIBLE_LANGOPT(ExpStrictFP, 1, false, "Enable experimental strict floating point")

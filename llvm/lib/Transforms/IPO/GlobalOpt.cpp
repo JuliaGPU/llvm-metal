@@ -18,6 +18,7 @@
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Statistic.h"
+#include "llvm/ADT/Triple.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/ADT/iterator_range.h"
 #include "llvm/Analysis/BlockFrequencyInfo.h"
@@ -1711,6 +1712,16 @@ static void ChangeCalleesToFastCall(Function *F) {
   }
 }
 
+/// ChangeCalleesToFloorFunc - Walk all of the direct calls of the specified
+/// function, changing them to floor_func calling convention.
+static void ChangeCalleesToFloorFunc(Function *F) {
+  for (User *U : F->users()) {
+    if (isa<BlockAddress>(U))
+      continue;
+    cast<CallBase>(U)->setCallingConv(CallingConv::FLOOR_FUNC);
+  }
+}
+
 static AttributeList StripAttr(LLVMContext &C, AttributeList Attrs,
                                Attribute::AttrKind A) {
   unsigned AttrIndex;
@@ -2045,8 +2056,18 @@ OptimizeFunctions(Module &M,
       // If this function has a calling convention worth changing, is not a
       // varargs function, and is only called directly, promote it to use the
       // Fast calling convention.
-      F.setCallingConv(CallingConv::Fast);
-      ChangeCalleesToFastCall(&F);
+      // NOTE: with OpenCL/Metal/Vulkan/CUDA: change it to floor_func instead (fastcc is invalid)
+      const llvm::Triple triple(M.getTargetTriple());
+      if (triple.getArch() == llvm::Triple::ArchType::spir ||
+          triple.getArch() == llvm::Triple::ArchType::spir64 ||
+          triple.getArch() == llvm::Triple::ArchType::air64 ||
+          triple.getOS() == llvm::Triple::OSType::CUDA) {
+        F.setCallingConv(CallingConv::FLOOR_FUNC);
+        ChangeCalleesToFloorFunc(&F);
+      } else {
+        F.setCallingConv(CallingConv::Fast);
+        ChangeCalleesToFastCall(&F);
+      }
       ++NumFastCallFns;
       Changed = true;
     }

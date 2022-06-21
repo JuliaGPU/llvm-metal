@@ -374,7 +374,8 @@ void TargetInfo::adjust(DiagnosticsEngine &Diags, LangOptions &Opts) {
     // OpenCL standard only mentions these as "reserved".
     IntWidth = IntAlign = 32;
     LongWidth = LongAlign = 64;
-    LongLongWidth = LongLongAlign = 128;
+    //LongLongWidth = LongLongAlign = 128; // NOTE: there is no 128-bit type support in OpenCL!
+    LongLongWidth = LongLongAlign = LongWidth;
     HalfWidth = HalfAlign = 16;
     FloatWidth = FloatAlign = 32;
 
@@ -385,7 +386,8 @@ void TargetInfo::adjust(DiagnosticsEngine &Diags, LangOptions &Opts) {
       DoubleWidth = DoubleAlign = 64;
       DoubleFormat = &llvm::APFloat::IEEEdouble();
     }
-    LongDoubleWidth = LongDoubleAlign = 128;
+    //LongDoubleWidth = LongDoubleAlign = 128; // NOTE: there is no 128-bit type support in OpenCL!
+    LongDoubleWidth = LongDoubleAlign = DoubleWidth;
 
     unsigned MaxPointerWidth = getMaxPointerWidth();
     assert(MaxPointerWidth == 32 || MaxPointerWidth == 64);
@@ -433,7 +435,7 @@ void TargetInfo::adjust(DiagnosticsEngine &Diags, LangOptions &Opts) {
     }
   }
 
-  if (Opts.LongDoubleSize) {
+  if (Opts.LongDoubleSize && !Opts.OpenCL) {
     if (Opts.LongDoubleSize == DoubleWidth) {
       LongDoubleWidth = DoubleWidth;
       LongDoubleAlign = DoubleAlign;

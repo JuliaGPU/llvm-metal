@@ -495,8 +495,12 @@ void MCObjectFileInfo::initELFMCObjectFileInfo(const Triple &T, bool Large) {
   FaultMapSection =
       Ctx->getELFSection(".llvm_faultmaps", ELF::SHT_PROGBITS, ELF::SHF_ALLOC);
 
-  EHFrameSection =
-      Ctx->getELFSection(".eh_frame", EHSectionType, EHSectionFlags);
+  // don't emit eh_frame for host-compute
+  if (T.getEnvironment() == Triple::FloorHostCompute)
+    SupportsCompactUnwindWithoutEHFrame = true;
+  else
+    EHFrameSection =
+        Ctx->getELFSection(".eh_frame", EHSectionType, EHSectionFlags);
 
   StackSizesSection = Ctx->getELFSection(".stack_sizes", ELF::SHT_PROGBITS, 0);
 

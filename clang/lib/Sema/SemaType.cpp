@@ -19,6 +19,7 @@
 #include "clang/AST/DeclObjC.h"
 #include "clang/AST/DeclTemplate.h"
 #include "clang/AST/Expr.h"
+#include "clang/AST/Type.h"
 #include "clang/AST/TypeLoc.h"
 #include "clang/AST/TypeLocVisitor.h"
 #include "clang/Basic/PartialDiagnostic.h"
@@ -125,13 +126,19 @@ static void diagnoseBadTypeAttribute(Sema &S, const ParsedAttr &attr,
   case ParsedAttr::AT_Pcs:                                                     \
   case ParsedAttr::AT_IntelOclBicc:                                            \
   case ParsedAttr::AT_PreserveMost:                                            \
-  case ParsedAttr::AT_PreserveAll
+  case ParsedAttr::AT_PreserveAll:                                             \
+  case ParsedAttr::AT_ComputeKernel:                                           \
+  case ParsedAttr::AT_GraphicsVertexShader:                                    \
+  case ParsedAttr::AT_GraphicsFragmentShader:                                  \
+  case ParsedAttr::AT_GraphicsTessellationControlShader:                       \
+  case ParsedAttr::AT_GraphicsTessellationEvaluationShader
 
 // Function type attributes.
 #define FUNCTION_TYPE_ATTRS_CASELIST                                           \
   case ParsedAttr::AT_NSReturnsRetained:                                       \
   case ParsedAttr::AT_NoReturn:                                                \
   case ParsedAttr::AT_Regparm:                                                 \
+  case ParsedAttr::AT_RetRange:                                                \
   case ParsedAttr::AT_CmseNSCall:                                              \
   case ParsedAttr::AT_AnyX86NoCallerSavedRegisters:                            \
   case ParsedAttr::AT_AnyX86NoCfCheck:                                         \
@@ -361,7 +368,8 @@ enum TypeAttrLocation {
 };
 
 static void processTypeAttrs(TypeProcessingState &state, QualType &type,
-                             TypeAttrLocation TAL, ParsedAttributesView &attrs);
+                             TypeAttrLocation TAL, ParsedAttributesView &attrs,
+                             Declarator &D);
 
 static bool handleFunctionTypeAttr(TypeProcessingState &state, ParsedAttr &attr,
                                    QualType &type);
@@ -1249,13 +1257,15 @@ TypeResult Sema::actOnObjCTypeArgsAndProtocolQualifiers(
   return CreateParsedType(Result, ResultTInfo);
 }
 
-static OpenCLAccessAttr::Spelling
+#if 0 // unused
+static ImageAccessAttr::Spelling
 getImageAccess(const ParsedAttributesView &Attrs) {
   for (const ParsedAttr &AL : Attrs)
-    if (AL.getKind() == ParsedAttr::AT_OpenCLAccess)
-      return static_cast<OpenCLAccessAttr::Spelling>(AL.getSemanticSpelling());
-  return OpenCLAccessAttr::Keyword_read_only;
+    if (AL.getKind() == ParsedAttr::AT_ImageAccess)
+      return static_cast<ImageAccessAttr::Spelling>(AL.getSemanticSpelling());
+  return ImageAccessAttr::GNU_image_read_only;
 }
+#endif
 
 /// Convert the specified declspec to the appropriate type
 /// object.
@@ -1700,22 +1710,31 @@ static QualType ConvertDeclSpecToType(TypeProcessingState &state) {
     }
     break;
 
-#define GENERIC_IMAGE_TYPE(ImgType, Id)                                        \
-  case DeclSpec::TST_##ImgType##_t:                                            \
-    switch (getImageAccess(DS.getAttributes())) {                              \
-    case OpenCLAccessAttr::Keyword_write_only:                                 \
-      Result = Context.Id##WOTy;                                               \
-      break;                                                                   \
-    case OpenCLAccessAttr::Keyword_read_write:                                 \
-      Result = Context.Id##RWTy;                                               \
-      break;                                                                   \
-    case OpenCLAccessAttr::Keyword_read_only:                                  \
-      Result = Context.Id##ROTy;                                               \
-      break;                                                                   \
-    case OpenCLAccessAttr::SpellingNotCalculated:                              \
-      llvm_unreachable("Spelling not yet calculated");                         \
-    }                                                                          \
+  case DeclSpec::TST_sampler_t:
+    Result = Context.OCLSamplerTy;
     break;
+
+  case DeclSpec::TST_event_t:
+    Result = Context.OCLEventTy;
+    break;
+  case DeclSpec::TST_queue_t:
+    Result = Context.OCLQueueTy;
+    break;
+  case DeclSpec::TST_clk_event_t:
+    Result = Context.OCLClkEventTy;
+    break;
+  case DeclSpec::TST_reserve_id_t:
+    Result = Context.OCLReserveIDTy;
+    break;
+  case DeclSpec::TST_patch_control_point_t:
+    Result = Context.OCLPatchControlPointTy;
+    break;
+
+#define GENERIC_IMAGE_TYPE(ImgType, Id)                                        \
+  case DeclSpec::TST_##ImgType##_t: {                                          \
+    Result = Context.Id##Ty;                                                   \
+    break;                                                                     \
+  }
 #include "clang/Basic/OpenCLImageTypes.def"
 
   case DeclSpec::TST_error:
@@ -1730,6 +1749,7 @@ static QualType ConvertDeclSpecToType(TypeProcessingState &state) {
   if (Result->containsErrors())
     declarator.setInvalidType();
 
+#if 0 // not tested here
   if (S.getLangOpts().OpenCL) {
     const auto &OpenCLOptions = S.getOpenCLOptions();
     bool IsOpenCLC30Compatible =
@@ -1758,6 +1778,7 @@ static QualType ConvertDeclSpecToType(TypeProcessingState &state) {
       declarator.setInvalidType();
     }
   }
+#endif
 
   bool IsFixedPointType = DS.getTypeSpecType() == DeclSpec::TST_accum ||
                           DS.getTypeSpecType() == DeclSpec::TST_fract;
@@ -1798,7 +1819,7 @@ static QualType ConvertDeclSpecToType(TypeProcessingState &state) {
   // attributes are pushed around.
   // pipe attributes will be handled later ( at GetFullTypeForDeclarator )
   if (!DS.isTypeSpecPipe())
-    processTypeAttrs(state, Result, TAL_DeclSpec, DS.getAttributes());
+    processTypeAttrs(state, Result, TAL_DeclSpec, DS.getAttributes(), declarator);
 
   // Apply const/volatile/restrict qualifiers to T.
   if (unsigned TypeQuals = DS.getTypeQualifiers()) {
@@ -2088,11 +2109,13 @@ bool Sema::CheckQualifiedFunctionForTypeId(QualType T, SourceLocation Loc) {
 
 // Helper to deduce addr space of a pointee type in OpenCL mode.
 static QualType deduceOpenCLPointeeAddrSpace(Sema &S, QualType PointeeType) {
+#if 0 // we don't want this
   if (!PointeeType->isUndeducedAutoType() && !PointeeType->isDependentType() &&
       !PointeeType->isSamplerT() &&
       !PointeeType.hasAddressSpace())
     PointeeType = S.getASTContext().getAddrSpaceQualType(
         PointeeType, S.getASTContext().getDefaultOpenCLPointeeAddrSpace());
+#endif
   return PointeeType;
 }
 
@@ -2118,7 +2141,7 @@ QualType Sema::BuildPointerType(QualType T,
     return QualType();
   }
 
-  if (T->isFunctionType() && getLangOpts().OpenCL &&
+  if (T->isFunctionType() && getLangOpts().OpenCL && !getLangOpts().CPlusPlus &&
       !getOpenCLOptions().isAvailableOption("__cl_clang_function_pointers",
                                             getLangOpts())) {
     Diag(Loc, diag::err_opencl_function_pointer) << /*pointer*/ 0;
@@ -2193,7 +2216,7 @@ QualType Sema::BuildReferenceType(QualType T, bool SpelledAsLValue,
   if (checkQualifiedFunction(*this, T, Loc, QFK_Reference))
     return QualType();
 
-  if (T->isFunctionType() && getLangOpts().OpenCL &&
+  if (T->isFunctionType() && getLangOpts().OpenCL && !getLangOpts().CPlusPlus &&
       !getOpenCLOptions().isAvailableOption("__cl_clang_function_pointers",
                                             getLangOpts())) {
     Diag(Loc, diag::err_opencl_function_pointer) << /*reference*/ 1;
@@ -2560,8 +2583,11 @@ QualType Sema::BuildArrayType(QualType T, ArrayType::ArraySizeModifier ASM,
     const QualType ArrType = Context.getBaseElementType(T);
     if (ArrType->isBlockPointerType() || ArrType->isPipeType() ||
         ArrType->isSamplerT() || ArrType->isImageType()) {
-      Diag(Loc, diag::err_opencl_invalid_type_array) << ArrType;
-      return QualType();
+      // allow C array of images for Vulkan and Metal
+      if (!((getLangOpts().Vulkan || getLangOpts().Metal) && ArrType->isImageType())) {
+        Diag(Loc, diag::err_opencl_invalid_type_array) << ArrType;
+        return QualType();
+      }
     }
   }
 
@@ -2760,7 +2786,7 @@ bool Sema::CheckFunctionReturnType(QualType T, SourceLocation Loc) {
   }
 
   // Functions cannot return half FP.
-  if (T->isHalfType() && !getLangOpts().HalfArgsAndReturns) {
+  if (T->isHalfType() && !getLangOpts().HalfArgsAndReturns && !LangOpts.OpenCL && !LangOpts.CUDA) {
     Diag(Loc, diag::err_parameters_retval_cannot_have_fp16_type) << 1 <<
       FixItHint::CreateInsertion(Loc, "*");
     return true;
@@ -2866,7 +2892,7 @@ QualType Sema::BuildFunctionType(QualType T,
     if (ParamType->isVoidType()) {
       Diag(Loc, diag::err_param_with_void_type);
       Invalid = true;
-    } else if (ParamType->isHalfType() && !getLangOpts().HalfArgsAndReturns) {
+    } else if (ParamType->isHalfType() && !getLangOpts().HalfArgsAndReturns && !LangOpts.OpenCL && !LangOpts.CUDA) {
       // Disallow half FP arguments.
       Diag(Loc, diag::err_parameters_retval_cannot_have_fp16_type) << 0 <<
         FixItHint::CreateInsertion(Loc, "*");
@@ -2935,7 +2961,7 @@ QualType Sema::BuildMemberPointerType(QualType T, QualType Class,
     return QualType();
   }
 
-  if (T->isFunctionType() && getLangOpts().OpenCL &&
+  if (T->isFunctionType() && getLangOpts().OpenCL && !getLangOpts().CPlusPlus &&
       !getOpenCLOptions().isAvailableOption("__cl_clang_function_pointers",
                                             getLangOpts())) {
     Diag(Loc, diag::err_opencl_function_pointer) << /*pointer*/ 0;
@@ -3355,7 +3381,7 @@ static QualType GetDeclSpecTypeForDeclarator(TypeProcessingState &state,
     // "void" instead.
     T = SemaRef.Context.VoidTy;
     processTypeAttrs(state, T, TAL_DeclSpec,
-                     D.getMutableDeclSpec().getAttributes());
+                     D.getMutableDeclSpec().getAttributes(), D);
     break;
 
   case UnqualifiedIdKind::IK_DeductionGuideName:
@@ -3930,14 +3956,26 @@ static CallingConv getCCForDeclaratorChunk(
   CallingConv CC = S.Context.getDefaultCallingConvention(FTI.isVariadic,
                                                          IsCXXInstanceMethod);
 
-  // Attribute AT_OpenCLKernel affects the calling convention for SPIR
-  // and AMDGPU targets, hence it cannot be treated as a calling
-  // convention attribute. This is the simplest place to infer
-  // calling convention for OpenCL kernels.
-  if (S.getLangOpts().OpenCL) {
+  // Attributes AT_ComputeKernel and AT_Graphics*
+  // affect the calling convention only on SPIR, AIR and CUDA targets, hence they cannot
+  // be treated as calling convention attributes. This is the simplest place to infer
+  // "floor_kernel"/"floor_vertex"/"floor_fragment"/"floor_tess*".
+  if (CC == CC_FloorFunction) {
     for (const ParsedAttr &AL : D.getDeclSpec().getAttributes()) {
-      if (AL.getKind() == ParsedAttr::AT_OpenCLKernel) {
-        CC = CC_OpenCLKernel;
+      if (AL.getKind() == ParsedAttr::AT_ComputeKernel) {
+        CC = CC_FloorKernel;
+        break;
+      } else if (AL.getKind() == ParsedAttr::AT_GraphicsVertexShader) {
+        CC = CC_FloorVertex;
+        break;
+      } else if (AL.getKind() == ParsedAttr::AT_GraphicsFragmentShader) {
+        CC = CC_FloorFragment;
+        break;
+      } else if (AL.getKind() == ParsedAttr::AT_GraphicsTessellationControlShader) {
+        CC = CC_FloorTessControl;
+        break;
+      } else if (AL.getKind() == ParsedAttr::AT_GraphicsTessellationEvaluationShader) {
+        CC = CC_FloorTessEval;
         break;
       }
     }
@@ -5074,7 +5112,7 @@ static TypeSourceInfo *GetFullTypeForDeclarator(TypeProcessingState &state,
                 << T << 0 /*pointer hint*/;
             D.setInvalidType(true);
           }
-        } else if (!S.getLangOpts().HalfArgsAndReturns) {
+        } else if (!S.getLangOpts().HalfArgsAndReturns && !S.getLangOpts().CUDA) {
           S.Diag(D.getIdentifierLoc(),
             diag::err_parameters_retval_cannot_have_fp16_type) << 1;
           D.setInvalidType(true);
@@ -5093,6 +5131,7 @@ static TypeSourceInfo *GetFullTypeForDeclarator(TypeProcessingState &state,
         // OpenCL doesn't support variadic functions and blocks
         // (s6.9.e and s6.12.5 OpenCL v2.0) except for printf.
         // We also allow here any toolchain reserved identifiers.
+#if 0 // we don't want this
         if (FTI.isVariadic &&
             !S.getOpenCLOptions().isAvailableOption(
                 "__cl_clang_variadic_functions", S.getLangOpts()) &&
@@ -5103,6 +5142,7 @@ static TypeSourceInfo *GetFullTypeForDeclarator(TypeProcessingState &state,
           S.Diag(D.getIdentifierLoc(), diag::err_opencl_variadic_function);
           D.setInvalidType(true);
         }
+#endif
       }
 
       // Methods cannot return interface types. All ObjC objects are
@@ -5297,7 +5337,7 @@ static TypeSourceInfo *GetFullTypeForDeclarator(TypeProcessingState &state,
                 D.setInvalidType();
                 Param->setInvalidDecl();
               }
-            } else if (!S.getLangOpts().HalfArgsAndReturns) {
+            } else if (!S.getLangOpts().HalfArgsAndReturns && !S.getLangOpts().CUDA) {
               S.Diag(Param->getLocation(),
                 diag::err_parameters_retval_cannot_have_fp16_type) << 0;
               D.setInvalidType();
@@ -5478,7 +5518,7 @@ static TypeSourceInfo *GetFullTypeForDeclarator(TypeProcessingState &state,
     case DeclaratorChunk::Pipe: {
       T = S.BuildReadPipeType(T, DeclType.Loc);
       processTypeAttrs(state, T, TAL_DeclSpec,
-                       D.getMutableDeclSpec().getAttributes());
+                       D.getMutableDeclSpec().getAttributes(), D);
       break;
     }
     }
@@ -5489,7 +5529,7 @@ static TypeSourceInfo *GetFullTypeForDeclarator(TypeProcessingState &state,
     }
 
     // See if there are any attributes on this declarator chunk.
-    processTypeAttrs(state, T, TAL_DeclChunk, DeclType.getAttrs());
+    processTypeAttrs(state, T, TAL_DeclChunk, DeclType.getAttrs(), D);
 
     if (DeclType.Kind != DeclaratorChunk::Paren) {
       if (ExpectNoDerefChunk && !IsNoDerefableChunk(DeclType))
@@ -5632,7 +5672,7 @@ static TypeSourceInfo *GetFullTypeForDeclarator(TypeProcessingState &state,
   }
 
   // Apply any undistributed attributes from the declarator.
-  processTypeAttrs(state, T, TAL_DeclName, D.getAttributes());
+  processTypeAttrs(state, T, TAL_DeclName, D.getAttributes(), D);
 
   // Diagnose any ignored type attributes.
   state.diagnoseIgnoredTypeAttrs(T);
@@ -6567,8 +6607,11 @@ static void HandleAddressSpaceTypeAttribute(QualType &Type,
     ASIdx = S.getLangOpts().SYCLIsDevice ? Attr.asSYCLLangAS()
                                          : Attr.asOpenCLLangAS();
 
-    if (ASIdx == LangAS::Default)
+    if (ASIdx == LangAS::Default) {
       llvm_unreachable("Invalid address space");
+      assert(Attr.getKind() == ParsedAttr::AT_PrivateAddressSpace);
+      ASIdx = LangAS::opencl_private;
+    }
 
     if (DiagnoseMultipleAddrSpaceAttributes(S, Type.getAddressSpace(), ASIdx,
                                             Attr.getLoc())) {
@@ -7411,6 +7454,16 @@ static Attr *getCCTypeAttr(ASTContext &Ctx, ParsedAttr &Attr) {
     return createSimpleAttr<PreserveMostAttr>(Ctx, Attr);
   case ParsedAttr::AT_PreserveAll:
     return createSimpleAttr<PreserveAllAttr>(Ctx, Attr);
+  case ParsedAttr::AT_GraphicsVertexShader:
+    return createSimpleAttr<GraphicsVertexShaderAttr>(Ctx, Attr);
+  case ParsedAttr::AT_GraphicsFragmentShader:
+    return createSimpleAttr<GraphicsFragmentShaderAttr>(Ctx, Attr);
+  case ParsedAttr::AT_GraphicsTessellationControlShader:
+    return createSimpleAttr<GraphicsTessellationControlShaderAttr>(Ctx, Attr);
+  case ParsedAttr::AT_GraphicsTessellationEvaluationShader:
+    return createSimpleAttr<GraphicsTessellationEvaluationShaderAttr>(Ctx, Attr);
+  case ParsedAttr::AT_ComputeKernel:
+    return createSimpleAttr<ComputeKernelAttr>(Ctx, Attr);
   }
   llvm_unreachable("unexpected attribute kind!");
 }
@@ -7961,62 +8014,6 @@ static void HandleArmMveStrictPolymorphismAttr(TypeProcessingState &State,
                               CurType, CurType);
 }
 
-/// Handle OpenCL Access Qualifier Attribute.
-static void HandleOpenCLAccessAttr(QualType &CurType, const ParsedAttr &Attr,
-                                   Sema &S) {
-  // OpenCL v2.0 s6.6 - Access qualifier can be used only for image and pipe type.
-  if (!(CurType->isImageType() || CurType->isPipeType())) {
-    S.Diag(Attr.getLoc(), diag::err_opencl_invalid_access_qualifier);
-    Attr.setInvalid();
-    return;
-  }
-
-  if (const TypedefType* TypedefTy = CurType->getAs<TypedefType>()) {
-    QualType BaseTy = TypedefTy->desugar();
-
-    std::string PrevAccessQual;
-    if (BaseTy->isPipeType()) {
-      if (TypedefTy->getDecl()->hasAttr<OpenCLAccessAttr>()) {
-        OpenCLAccessAttr *Attr =
-            TypedefTy->getDecl()->getAttr<OpenCLAccessAttr>();
-        PrevAccessQual = Attr->getSpelling();
-      } else {
-        PrevAccessQual = "read_only";
-      }
-    } else if (const BuiltinType* ImgType = BaseTy->getAs<BuiltinType>()) {
-
-      switch (ImgType->getKind()) {
-        #define IMAGE_TYPE(ImgType, Id, SingletonId, Access, Suffix) \
-      case BuiltinType::Id:                                          \
-        PrevAccessQual = #Access;                                    \
-        break;
-        #include "clang/Basic/OpenCLImageTypes.def"
-      default:
-        llvm_unreachable("Unable to find corresponding image type.");
-      }
-    } else {
-      llvm_unreachable("unexpected type");
-    }
-    StringRef AttrName = Attr.getAttrName()->getName();
-    if (PrevAccessQual == AttrName.ltrim("_")) {
-      // Duplicated qualifiers
-      S.Diag(Attr.getLoc(), diag::warn_duplicate_declspec)
-         << AttrName << Attr.getRange();
-    } else {
-      // Contradicting qualifiers
-      S.Diag(Attr.getLoc(), diag::err_opencl_multiple_access_qualifiers);
-    }
-
-    S.Diag(TypedefTy->getDecl()->getBeginLoc(),
-           diag::note_opencl_typedef_access_qualifier) << PrevAccessQual;
-  } else if (CurType->isPipeType()) {
-    if (Attr.getSemanticSpelling() == OpenCLAccessAttr::Keyword_write_only) {
-      QualType ElemType = CurType->castAs<PipeType>()->getElementType();
-      CurType = S.Context.getWritePipeType(ElemType);
-    }
-  }
-}
-
 /// HandleMatrixTypeAttr - "matrix_type" attribute, like ext_vector_type
 static void HandleMatrixTypeAttr(QualType &CurType, const ParsedAttr &Attr,
                                  Sema &S) {
@@ -8048,22 +8045,123 @@ static void HandleLifetimeBoundAttr(TypeProcessingState &State,
   }
 }
 
+static void deduceOpenCLImplicitAddrSpace(TypeProcessingState &State,
+                                          QualType &T, TypeAttrLocation TAL) {
+  Declarator &D = State.getDeclarator();
+
+  // Handle the cases where address space should not be deduced.
+  //
+  // The pointee type of a pointer type is always deduced since a pointer always
+  // points to some memory location which should has an address space.
+  //
+  // There are situations that at the point of certain declarations, the address
+  // space may be unknown and better to be left as default. For example, when
+  // defining a typedef or struct type, they are not associated with any
+  // specific address space. Later on, they may be used with any address space
+  // to declare a variable.
+  //
+  // The return value of a function is r-value, therefore should not have
+  // address space.
+  //
+  // The void type does not occupy memory, therefore should not have address
+  // space, except when it is used as a pointee type.
+  //
+  // Since LLVM assumes function type is in default address space, it should not
+  // have address space.
+  auto ChunkIndex = State.getCurrentChunkIndex();
+  bool IsPointee =
+      ChunkIndex > 0 &&
+      (D.getTypeObject(ChunkIndex - 1).Kind == DeclaratorChunk::Pointer ||
+       D.getTypeObject(ChunkIndex - 1).Kind == DeclaratorChunk::BlockPointer ||
+       D.getTypeObject(ChunkIndex - 1).Kind == DeclaratorChunk::Reference);
+  bool IsFuncReturnType =
+      ChunkIndex > 0 &&
+      D.getTypeObject(ChunkIndex - 1).Kind == DeclaratorChunk::Function;
+  bool IsFuncType =
+      ChunkIndex < D.getNumTypeObjects() &&
+      D.getTypeObject(ChunkIndex).Kind == DeclaratorChunk::Function;
+  if ( // Do not deduce addr space for function return type and function type,
+       // otherwise it will fail some sema check.
+      IsFuncReturnType || IsFuncType ||
+      // Do not deduce addr space for member types of struct, except the pointee
+      // type of a pointer member type.
+      (D.getContext() == DeclaratorContext::Member && !IsPointee) ||
+      // Do not deduce addr space for types used to define a typedef and the
+      // typedef itself, except the pointee type of a pointer type which is used
+      // to define the typedef.
+      (D.getDeclSpec().getStorageClassSpec() == DeclSpec::SCS_typedef &&
+       !IsPointee) ||
+      // Do not deduce addr space of the void type, e.g. in f(void), otherwise
+      // it will fail some sema check.
+      (T->isVoidType() && !IsPointee) ||
+      // Do not deduce address spaces for dependent types because they might end
+      // up instantiating to a type with an explicit address space qualifier.
+      T->isDependentType())
+    return;
+
+  LangAS ImpAddr = LangAS::Default;
+  // NOTE: disabled due to it being _very_ incompatible to other backends right now
+#if 0 // we don't want automatic address space deduction
+  // Put OpenCL automatic variable in private address space.
+  // OpenCL v1.2 s6.5:
+  // The default address space name for arguments to a function in a
+  // program, or local variables of a function is __private. All function
+  // arguments shall be in the __private address space.
+  if (State.getSema().getLangOpts().OpenCLVersion <= 120 &&
+      !State.getSema().getLangOpts().OpenCLCPlusPlus &&
+      !State.getSema().getLangOpts().CPlusPlus) {
+    ImpAddr = LangAS::opencl_private;
+  } else {
+    // If address space is not set, OpenCL 2.0 defines non private default
+    // address spaces for some cases:
+    // OpenCL 2.0, section 6.5:
+    // The address space for a variable at program scope or a static variable
+    // inside a function can either be __global or __constant, but defaults to
+    // __global if not specified.
+    // (...)
+    // Pointers that are declared without pointing to a named address space
+    // point to the generic address space.
+    if (IsPointee) {
+      ImpAddr = LangAS::opencl_generic;
+    } else {
+      if (D.getContext() == DeclaratorContext::TemplateArgContext) {
+        // Do not deduce address space for non-pointee type in template arg.
+      } else if (D.getContext() == DeclaratorContext::FileContext) {
+        ImpAddr = LangAS::opencl_global;
+      } else {
+        if (D.getDeclSpec().getStorageClassSpec() == DeclSpec::SCS_static ||
+            D.getDeclSpec().getStorageClassSpec() == DeclSpec::SCS_extern) {
+			if (D.getDeclSpec().isConstexprSpecified() ||
+				T.isConstQualified()) {
+				ImpAddr = LangAS::opencl_constant;
+			} else {
+				ImpAddr = LangAS::opencl_global;
+			}
+        } else {
+          ImpAddr = LangAS::opencl_private;
+        }
+      }
+    }
+  }
+#endif
+  T = State.getSema().Context.getAddrSpaceQualType(T, ImpAddr);
+}
+
 static bool isAddressSpaceKind(const ParsedAttr &attr) {
   auto attrKind = attr.getKind();
 
   return attrKind == ParsedAttr::AT_AddressSpace ||
-         attrKind == ParsedAttr::AT_OpenCLPrivateAddressSpace ||
-         attrKind == ParsedAttr::AT_OpenCLGlobalAddressSpace ||
-         attrKind == ParsedAttr::AT_OpenCLGlobalDeviceAddressSpace ||
-         attrKind == ParsedAttr::AT_OpenCLGlobalHostAddressSpace ||
-         attrKind == ParsedAttr::AT_OpenCLLocalAddressSpace ||
-         attrKind == ParsedAttr::AT_OpenCLConstantAddressSpace ||
-         attrKind == ParsedAttr::AT_OpenCLGenericAddressSpace;
+         attrKind == ParsedAttr::AT_PrivateAddressSpace ||
+         attrKind == ParsedAttr::AT_GlobalAddressSpace ||
+         attrKind == ParsedAttr::AT_LocalAddressSpace ||
+         attrKind == ParsedAttr::AT_ConstantAddressSpace ||
+         attrKind == ParsedAttr::AT_GenericAddressSpace;
 }
 
 static void processTypeAttrs(TypeProcessingState &state, QualType &type,
                              TypeAttrLocation TAL,
-                             ParsedAttributesView &attrs) {
+                             ParsedAttributesView &attrs,
+                             Declarator &D) {
   // Scan through and apply attributes to this type where it makes sense.  Some
   // attributes (such as __address_space__, __vector_size__, etc) apply to the
   // type, but others can be present in the type specifiers even though they
@@ -8134,13 +8232,11 @@ static void processTypeAttrs(TypeProcessingState &state, QualType &type,
       // it it breaks large amounts of Linux software.
       attr.setUsedAsTypeAttr();
       break;
-    case ParsedAttr::AT_OpenCLPrivateAddressSpace:
-    case ParsedAttr::AT_OpenCLGlobalAddressSpace:
-    case ParsedAttr::AT_OpenCLGlobalDeviceAddressSpace:
-    case ParsedAttr::AT_OpenCLGlobalHostAddressSpace:
-    case ParsedAttr::AT_OpenCLLocalAddressSpace:
-    case ParsedAttr::AT_OpenCLConstantAddressSpace:
-    case ParsedAttr::AT_OpenCLGenericAddressSpace:
+    case ParsedAttr::AT_PrivateAddressSpace:
+    case ParsedAttr::AT_GlobalAddressSpace:
+    case ParsedAttr::AT_LocalAddressSpace:
+    case ParsedAttr::AT_ConstantAddressSpace:
+    case ParsedAttr::AT_GenericAddressSpace:
     case ParsedAttr::AT_AddressSpace:
       HandleAddressSpaceTypeAttribute(type, attr, state);
       attr.setUsedAsTypeAttr();
@@ -8177,8 +8273,17 @@ static void processTypeAttrs(TypeProcessingState &state, QualType &type,
       attr.setUsedAsTypeAttr();
       break;
     }
-    case ParsedAttr::AT_OpenCLAccess:
-      HandleOpenCLAccessAttr(type, attr, state.getSema());
+    case ParsedAttr::AT_ImageAccess:
+    case ParsedAttr::AT_FloorArgBuffer:
+    case ParsedAttr::AT_FloorImageDataType:
+    case ParsedAttr::AT_FloorImageFlags:
+    case ParsedAttr::AT_VectorCompat:
+    case ParsedAttr::AT_GraphicsFBOColorLocation:
+    case ParsedAttr::AT_GraphicsFBODepthType:
+    case ParsedAttr::AT_GraphicsVertexPosition:
+    case ParsedAttr::AT_GraphicsPointSize:
+    case ParsedAttr::AT_GraphicsStageInput:
+    case ParsedAttr::AT_GraphicsTessellationPatch:
       attr.setUsedAsTypeAttr();
       break;
     case ParsedAttr::AT_LifetimeBound:
@@ -8310,6 +8415,12 @@ static void processTypeAttrs(TypeProcessingState &state, QualType &type,
           attr.getMacroExpansionLoc());
     }
   }
+
+  if (!state.getSema().getLangOpts().OpenCL ||
+      type.getAddressSpace() != LangAS::Default)
+    return;
+
+  deduceOpenCLImplicitAddrSpace(state, type, TAL);
 }
 
 void Sema::completeExprArrayBound(Expr *E) {

@@ -118,7 +118,7 @@ static void EmitDeclDestroy(CodeGenFunction &CGF, const VarDecl &D,
     CXXDestructorDecl *Dtor = Record->getDestructor();
 
     Func = CGM.getAddrAndTypeOfCXXStructor(GlobalDecl(Dtor, Dtor_Complete));
-    if (CGF.getContext().getLangOpts().OpenCL) {
+    if (CGF.getContext().getLangOpts().OpenCL && !CGF.getContext().getLangOpts().CPlusPlus) {
       auto DestAS =
           CGM.getTargetCodeGenInfo().getAddrSpaceOfCxaAtexitPtrParam();
       auto DestTy = CGF.getTypes().ConvertType(Type)->getPointerTo(
@@ -685,6 +685,11 @@ CodeGenModule::EmitCXXGlobalInitFunc() {
   if (getCXXABI().useSinitAndSterm() && CXXGlobalInits.empty())
     return;
 
+  if (getLangOpts().OpenCL && !CXXGlobalInits.empty()) {
+    assert(false && "unsupported");
+    getDiags().getCustomDiagID(DiagnosticsEngine::Fatal, "global C++ init functions are not supported");
+  }
+
   // Include the filename in the symbol name. Including "sub_" matches gcc
   // and makes sure these symbols appear lexicographically behind the symbols
   // with priority emitted above.
@@ -703,10 +708,12 @@ CodeGenModule::EmitCXXGlobalInitFunc() {
   // However it seems global destruction has little meaning without any
   // dynamic resource allocation on the device and program scope variables are
   // destroyed by the runtime when program is released.
+#if 0 // nope
   if (getLangOpts().OpenCL) {
     GenOpenCLArgMetadata(Fn);
-    Fn->setCallingConv(llvm::CallingConv::SPIR_KERNEL);
+    Fn->setCallingConv(llvm::CallingConv::FLOOR_KERNEL);
   }
+#endif
 
   assert(!getLangOpts().CUDA || !getLangOpts().CUDAIsDevice ||
          getLangOpts().GPUAllowDeviceInit);

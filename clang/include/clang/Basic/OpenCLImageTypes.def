@@ -21,22 +21,42 @@
 #define IMAGE_READ_WRITE_TYPE(Type, Id, Ext)
 
 #elif defined(GENERIC_IMAGE_TYPE_EXT)
+#if 1 // NOTE: same as below
+#define IMAGE_READ_TYPE(Type, Id, Ext) GENERIC_IMAGE_TYPE_EXT(Type, Id##Ty, Ext)
+#define IMAGE_WRITE_TYPE(Type, Id, Ext)
+#define IMAGE_READ_WRITE_TYPE(Type, Id, Ext)
+#else
 #define IMAGE_READ_TYPE(Type, Id, Ext) GENERIC_IMAGE_TYPE_EXT(Type, Id##ROTy, Ext)
 #define IMAGE_WRITE_TYPE(Type, Id, Ext) GENERIC_IMAGE_TYPE_EXT(Type, Id##WOTy, Ext)
 #define IMAGE_READ_WRITE_TYPE(Type, Id, Ext) GENERIC_IMAGE_TYPE_EXT(Type, Id##RWTy, Ext)
+#endif
+
+#else
+
+// NOTE/TODO:
+// this new method of using ro/wo/rw specific image types does not yet
+// work everywhere and is generally incompatible to SPIR 1.2 itself
+// -> use the new facilities, but keep using the old/standard type names
+#if 1
+
+#define IMAGE_READ_TYPE(Type, Id, Ext) IMAGE_TYPE(Type, Id, Id##Ty, , )
+#define IMAGE_WRITE_TYPE(Type, Id, Ext)
+#define IMAGE_READ_WRITE_TYPE(Type, Id, Ext)
 
 #else
 #ifndef IMAGE_READ_TYPE
 #define IMAGE_READ_TYPE(Type, Id, Ext) \
-          IMAGE_TYPE(Type, Id##RO, Id##ROTy,  read_only, ro)
+          IMAGE_TYPE(Type, Id##RO, Id##ROTy,  read_only, _ro)
 #endif
 #ifndef IMAGE_WRITE_TYPE
 #define IMAGE_WRITE_TYPE(Type, Id, Ext) \
-          IMAGE_TYPE(Type, Id##WO, Id##WOTy, write_only, wo)
+          IMAGE_TYPE(Type, Id##WO, Id##WOTy, write_only, _wo)
 #endif
 #ifndef IMAGE_READ_WRITE_TYPE
 #define IMAGE_READ_WRITE_TYPE(Type, Id, Ext) \
-          IMAGE_TYPE(Type, Id##RW, Id##RWTy, read_write, rw)
+          IMAGE_TYPE(Type, Id##RW, Id##RWTy, read_write, _rw)
+#endif
+
 #endif
 
 #endif
@@ -53,6 +73,10 @@ IMAGE_READ_TYPE(image2d_array_msaa, OCLImage2dArrayMSAA, "cl_khr_gl_msaa_sharing
 IMAGE_READ_TYPE(image2d_msaa_depth, OCLImage2dMSAADepth, "cl_khr_gl_msaa_sharing")
 IMAGE_READ_TYPE(image2d_array_msaa_depth, OCLImage2dArrayMSAADepth, "cl_khr_gl_msaa_sharing")
 IMAGE_READ_TYPE(image3d, OCLImage3d, "")
+IMAGE_READ_TYPE(imagecube, OCLImageCube, "")
+IMAGE_READ_TYPE(imagecube_array, OCLImageCubeArray, "")
+IMAGE_READ_TYPE(imagecube_depth, OCLImageCubeDepth, "")
+IMAGE_READ_TYPE(imagecube_array_depth, OCLImageCubeArrayDepth, "")
 
 IMAGE_WRITE_TYPE(image1d, OCLImage1d, "")
 IMAGE_WRITE_TYPE(image1d_array, OCLImage1dArray, "")
@@ -66,6 +90,10 @@ IMAGE_WRITE_TYPE(image2d_array_msaa, OCLImage2dArrayMSAA, "cl_khr_gl_msaa_sharin
 IMAGE_WRITE_TYPE(image2d_msaa_depth, OCLImage2dMSAADepth, "cl_khr_gl_msaa_sharing")
 IMAGE_WRITE_TYPE(image2d_array_msaa_depth, OCLImage2dArrayMSAADepth, "cl_khr_gl_msaa_sharing")
 IMAGE_WRITE_TYPE(image3d, OCLImage3d, "")
+IMAGE_WRITE_TYPE(imagecube, OCLImageCube, "")
+IMAGE_WRITE_TYPE(imagecube_array, OCLImageCubeArray, "")
+IMAGE_WRITE_TYPE(imagecube_depth, OCLImageCubeDepth, "")
+IMAGE_WRITE_TYPE(imagecube_array_depth, OCLImageCubeArrayDepth, "")
 
 IMAGE_READ_WRITE_TYPE(image1d, OCLImage1d, "")
 IMAGE_READ_WRITE_TYPE(image1d_array, OCLImage1dArray, "")
@@ -79,6 +107,10 @@ IMAGE_READ_WRITE_TYPE(image2d_array_msaa, OCLImage2dArrayMSAA, "cl_khr_gl_msaa_s
 IMAGE_READ_WRITE_TYPE(image2d_msaa_depth, OCLImage2dMSAADepth, "cl_khr_gl_msaa_sharing")
 IMAGE_READ_WRITE_TYPE(image2d_array_msaa_depth, OCLImage2dArrayMSAADepth, "cl_khr_gl_msaa_sharing")
 IMAGE_READ_WRITE_TYPE(image3d, OCLImage3d, "")
+IMAGE_READ_WRITE_TYPE(imagecube, OCLImageCube, "")
+IMAGE_READ_WRITE_TYPE(imagecube_array, OCLImageCubeArray, "")
+IMAGE_READ_WRITE_TYPE(imagecube_depth, OCLImageCubeDepth, "")
+IMAGE_READ_WRITE_TYPE(imagecube_array_depth, OCLImageCubeArrayDepth, "")
 
 #undef IMAGE_TYPE
 #undef GENERIC_IMAGE_TYPE

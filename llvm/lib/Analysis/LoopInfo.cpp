@@ -492,10 +492,12 @@ bool Loop::isSafeToClone() const {
         isa<CallBrInst>(BB->getTerminator()))
       return false;
 
+#if 0 // TODO/NOTE: ignoring this for now, duplicates can very well exist in the same scope
     for (Instruction &I : *BB)
       if (auto *CB = dyn_cast<CallBase>(&I))
         if (CB->cannotDuplicate())
           return false;
+#endif
   }
   return true;
 }

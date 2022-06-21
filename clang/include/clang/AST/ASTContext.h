@@ -35,6 +35,7 @@
 #include "clang/Basic/LangOptions.h"
 #include "clang/Basic/Linkage.h"
 #include "clang/Basic/NoSanitizeList.h"
+#include "clang/Basic/OpenCLOptions.h"
 #include "clang/Basic/OperatorKinds.h"
 #include "clang/Basic/PartialDiagnostic.h"
 #include "clang/Basic/ProfileList.h"
@@ -80,6 +81,7 @@ class APFixedPoint;
 class FixedPointSemantics;
 struct fltSemantics;
 template <typename T, unsigned N> class SmallPtrSet;
+class Type;
 
 } // namespace llvm
 
@@ -603,6 +605,12 @@ private:
   ///  this ASTContext object.
   LangOptions &LangOpts;
 
+  /// enabled/used OpenCL features and options (used by Sema)
+  OpenCLOptions OpenCLFeatures;
+
+  /// module-level flag if the FP contract was ever disabled
+  bool disabledFPContract = false;
+
   /// NoSanitizeList object that is used by sanitizers to decide which
   /// entities should not be instrumented.
   std::unique_ptr<NoSanitizeList> NoSanitizeL;
@@ -763,6 +771,12 @@ public:
   bool AtomicUsesUnsupportedLibcall(const AtomicExpr *E) const;
 
   const LangOptions& getLangOpts() const { return LangOpts; }
+
+  OpenCLOptions& getOpenCLFeatures() { return OpenCLFeatures; }
+  const OpenCLOptions& getOpenCLFeatures() const { return OpenCLFeatures; }
+
+  void disableFPContract() { disabledFPContract = true; }
+  bool isFPContractDisabled() const { return disabledFPContract; }
 
   // If this condition is false, typo correction must be performed eagerly
   // rather than delayed in many places, as it makes use of dependent types.
@@ -1108,7 +1122,7 @@ public:
 #define IMAGE_TYPE(ImgType, Id, SingletonId, Access, Suffix) \
   CanQualType SingletonId;
 #include "clang/Basic/OpenCLImageTypes.def"
-  CanQualType OCLSamplerTy, OCLEventTy, OCLClkEventTy;
+  CanQualType OCLSamplerTy, OCLEventTy, OCLClkEventTy, OCLPatchControlPointTy;
   CanQualType OCLQueueTy, OCLReserveIDTy;
   CanQualType IncompleteMatrixIdxTy;
   CanQualType OMPArraySectionTy, OMPArrayShapingTy, OMPIteratorTy;
@@ -3251,6 +3265,70 @@ private:
   /// All OMPTraitInfo objects live in this collection, one per
   /// `pragma omp [begin] declare variant` directive.
   SmallVector<std::unique_ptr<OMPTraitInfo>, 4> OMPTraitInfoVector;
+
+public:
+  //===--------------------------------------------------------------------===//
+  //                         LibFloor type handling
+  //===--------------------------------------------------------------------===//
+
+  // single entry/field within an aggregate
+  struct aggregate_scalar_entry {
+    clang::QualType type;
+    std::string name;
+    std::string mangled_name;
+    const AttrVec* attrs;
+    // NOTE: this is nullptr for non-fields!
+    const FieldDecl* field_decl;
+    std::vector<const CXXRecordDecl*> parents;
+    bool compat_vector;
+    bool is_in_base;
+    
+    template <typename SpecificAttr>
+    bool hasAttr() const {
+      if(attrs == nullptr) return false;
+      return hasSpecificAttr<SpecificAttr>(*attrs);
+    }
+    
+    template <typename SpecificAttr>
+    SpecificAttr* getAttr() const {
+      if(attrs == nullptr) return nullptr;
+      return getSpecificAttr<SpecificAttr>(*attrs);
+    }
+  };
+
+  /// Will recurse through the specified class/struct decl, its base classes,
+  /// all its contained class/struct/union decls, all its contained arrays,
+  /// returning a vector of all contained/scalarized fields + info.
+  /// NOTE: for unions, only the first field will be considered
+  /// NOTE: this also transform/converts [[vector_compat]] types to clang vector types
+  std::vector<aggregate_scalar_entry> get_aggregate_scalar_fields(const CXXRecordDecl* root_decl,
+                                                                  const CXXRecordDecl* decl,
+                                                                  MangleContext* MC = nullptr,
+                                                                  const bool ignore_root_vec_compat = false,
+                                                                  const bool ignore_bases = false,
+                                                                  const bool expand_array_image = true) const;
+
+  /// Returns the corresponding clang vector type for a [[vector_compat]] aggregate.
+  clang::QualType get_compat_vector_type(const CXXRecordDecl* decl) const;
+
+  /// Creates and returns a graphics backend (Metal/Vulkan) compatible anonymous struct type
+  /// from the specified clang "type".
+  /// If "create_packed" is true, this will create a packed struct type.
+  clang::QualType get_unnamed_expanded_graphics_io_type(const QualType& type,
+                                                        const bool create_packed = false);
+
+private:
+  // helper function for get_aggregate_scalar_fields
+  void aggregate_scalar_fields_add_array(const CXXRecordDecl* root_decl,
+                                         const CXXRecordDecl* parent_decl,
+                                         const ConstantArrayType* CAT,
+                                         const AttrVec* attrs,
+                                         const FieldDecl* parent_field_decl,
+                                         const std::string& name,
+                                         const bool expand_array_image,
+                                         MangleContext* MC,
+                                         std::vector<ASTContext::aggregate_scalar_entry>& ret) const;
+
 };
 
 /// Insertion operator for diagnostics.

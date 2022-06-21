@@ -636,7 +636,7 @@ std::string PredefinedExpr::ComputeName(IdentKind IK, const Decl *CurrentDecl) {
           GD = GlobalDecl(CD, Ctor_Base);
         else if (const CXXDestructorDecl *DD = dyn_cast<CXXDestructorDecl>(ND))
           GD = GlobalDecl(DD, Dtor_Base);
-        else if (ND->hasAttr<CUDAGlobalAttr>())
+        else if (ND->hasAttr<ComputeKernelAttr>())
           GD = GlobalDecl(cast<FunctionDecl>(ND));
         else
           GD = GlobalDecl(ND);
@@ -1841,6 +1841,8 @@ bool CastExpr::CastConsistency() const {
   case CK_ARCReclaimReturnedObject:
   case CK_ARCExtendBlockObject:
   case CK_ZeroToOCLOpaqueType:
+  case CK_ZeroToOCLEvent:
+  case CK_ZeroToOCLQueue:
   case CK_IntToOCLSampler:
   case CK_FloatingToFixedPoint:
   case CK_FixedPointToFloating:

@@ -170,16 +170,28 @@ LANGSTANDARD_ALIAS_DEPR(opencl10, "cl")
 
 LANGSTANDARD(opencl11, "cl1.1",
              OpenCL, "OpenCL 1.1",
-             LineComment | C99 | Digraphs | HexFloat | OpenCL)
+             LineComment | CPlusPlus | CPlusPlus11 | CPlusPlus14 | CPlusPlus17 |
+             CPlusPlus20 | CPlusPlus2b | Digraphs | HexFloat | GNUMode | OpenCL)
 LANGSTANDARD(opencl12, "cl1.2",
              OpenCL, "OpenCL 1.2",
-             LineComment | C99 | Digraphs | HexFloat | OpenCL)
+             LineComment | CPlusPlus | CPlusPlus11 | CPlusPlus14 | CPlusPlus17 |
+             CPlusPlus20 | CPlusPlus2b | Digraphs | HexFloat | GNUMode | OpenCL)
 LANGSTANDARD(opencl20, "cl2.0",
              OpenCL, "OpenCL 2.0",
-             LineComment | C99 | Digraphs | HexFloat | OpenCL)
+             LineComment | CPlusPlus | CPlusPlus11 | CPlusPlus14 | CPlusPlus17 |
+             CPlusPlus20 | CPlusPlus2b | Digraphs | HexFloat | GNUMode | OpenCL)
+LANGSTANDARD(opencl21, "cl2.1",
+             OpenCL, "OpenCL 2.1",
+             LineComment | CPlusPlus | CPlusPlus11 | CPlusPlus14 | CPlusPlus17 |
+             CPlusPlus20 | CPlusPlus2b | Digraphs | HexFloat | GNUMode | OpenCL)
+LANGSTANDARD(opencl22, "cl2.2",
+             OpenCL, "OpenCL 2.2",
+             LineComment | CPlusPlus | CPlusPlus11 | CPlusPlus14 | CPlusPlus17 |
+             CPlusPlus20 | CPlusPlus2b | Digraphs | HexFloat | GNUMode | OpenCL)
 LANGSTANDARD(opencl30, "cl3.0",
              OpenCL, "OpenCL 3.0",
-             LineComment | C99 | Digraphs | HexFloat | OpenCL)
+             LineComment | CPlusPlus | CPlusPlus11 | CPlusPlus14 | CPlusPlus17 |
+             CPlusPlus20 | CPlusPlus2b | Digraphs | HexFloat | GNUMode | OpenCL)
 
 LANGSTANDARD(openclcpp10, "clc++1.0",
              OpenCL, "C++ for OpenCL 1.0",
@@ -201,13 +213,37 @@ LANGSTANDARD_ALIAS_DEPR(openclcpp10, "CLC++")
 LANGSTANDARD_ALIAS_DEPR(openclcpp10, "CLC++1.0")
 LANGSTANDARD_ALIAS_DEPR(openclcpp2021, "CLC++2021")
 
+// Metal
+LANGSTANDARD(metal20, "metal2.0", Metal, "Metal 2.0",
+             LineComment | CPlusPlus | CPlusPlus11 | CPlusPlus14 | CPlusPlus17 |
+             CPlusPlus20 | CPlusPlus2b | Digraphs | HexFloat | GNUMode | OpenCL)
+LANGSTANDARD(metal21, "metal2.1", Metal, "Metal 2.1",
+             LineComment | CPlusPlus | CPlusPlus11 | CPlusPlus14 | CPlusPlus17 |
+             CPlusPlus20 | CPlusPlus2b | Digraphs | HexFloat | GNUMode | OpenCL)
+LANGSTANDARD(metal22, "metal2.2", Metal, "Metal 2.2",
+             LineComment | CPlusPlus | CPlusPlus11 | CPlusPlus14 | CPlusPlus17 |
+             CPlusPlus20 | CPlusPlus2b | Digraphs | HexFloat | GNUMode | OpenCL)
+LANGSTANDARD(metal23, "metal2.3", Metal, "Metal 2.3",
+             LineComment | CPlusPlus | CPlusPlus11 | CPlusPlus14 | CPlusPlus17 |
+             CPlusPlus20 | CPlusPlus2b | Digraphs | HexFloat | GNUMode | OpenCL)
+LANGSTANDARD(metal24, "metal2.4", Metal, "Metal 2.4",
+             LineComment | CPlusPlus | CPlusPlus11 | CPlusPlus14 | CPlusPlus17 |
+             CPlusPlus20 | CPlusPlus2b | Digraphs | HexFloat | GNUMode | OpenCL)
+
+// Vulkan
+LANGSTANDARD(vulkan12, "vulkan1.2", Vulkan, "Vulkan C++ 1.2",
+             LineComment | CPlusPlus | CPlusPlus11 | CPlusPlus14 | CPlusPlus17 |
+             CPlusPlus20 | CPlusPlus2b | Digraphs | HexFloat | GNUMode | OpenCL)
+
 // CUDA
 LANGSTANDARD(cuda, "cuda", CUDA, "NVIDIA CUDA(tm)",
-             LineComment | CPlusPlus | CPlusPlus11 | CPlusPlus14 | Digraphs)
+             LineComment | CPlusPlus | CPlusPlus11 | CPlusPlus14 | CPlusPlus17 |
+             CPlusPlus20 | CPlusPlus2b | Digraphs | HexFloat | GNUMode)
 
 // HIP
 LANGSTANDARD(hip, "hip", HIP, "HIP",
-             LineComment | CPlusPlus | CPlusPlus11 | CPlusPlus14 | Digraphs)
+             LineComment | CPlusPlus | CPlusPlus11 | CPlusPlus14 | CPlusPlus17 |
+             CPlusPlus20 | CPlusPlus2b | Digraphs | HexFloat | GNUMode)
 
 #undef LANGSTANDARD
 #undef LANGSTANDARD_ALIAS

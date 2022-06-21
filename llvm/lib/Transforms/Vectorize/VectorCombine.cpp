@@ -64,9 +64,9 @@ class VectorCombine {
 public:
   VectorCombine(Function &F, const TargetTransformInfo &TTI,
                 const DominatorTree &DT, AAResults &AA, AssumptionCache &AC,
-                bool ScalarizationOnly)
+                bool ScalarizationOnly, bool isVulkan_ = false)
       : F(F), Builder(F.getContext()), TTI(TTI), DT(DT), AA(AA), AC(AC),
-        ScalarizationOnly(ScalarizationOnly) {}
+        isVulkan(isVulkan_), ScalarizationOnly(ScalarizationOnly) {}
 
   bool run();
 
@@ -77,6 +77,7 @@ private:
   const DominatorTree &DT;
   AAResults &AA;
   AssumptionCache &AC;
+  const bool isVulkan { false };
 
   /// If true only perform scalarization combines and do not introduce new
   /// vector operations.
@@ -124,6 +125,11 @@ private:
 } // namespace
 
 bool VectorCombine::vectorizeLoadInsert(Instruction &I) {
+  // never allowed in Vulkan
+  if (isVulkan) {
+    return false;
+  }
+
   // Match insert into fixed vector of scalar value.
   // TODO: Handle non-zero insert index.
   auto *Ty = dyn_cast<FixedVectorType>(I.getType());
@@ -1178,7 +1184,8 @@ namespace {
 class VectorCombineLegacyPass : public FunctionPass {
 public:
   static char ID;
-  VectorCombineLegacyPass() : FunctionPass(ID) {
+  const bool isVulkan { false };
+  VectorCombineLegacyPass(bool isVulkan_ = false) : FunctionPass(ID), isVulkan(isVulkan_) {
     initializeVectorCombineLegacyPassPass(*PassRegistry::getPassRegistry());
   }
 
@@ -1202,7 +1209,7 @@ public:
     auto &TTI = getAnalysis<TargetTransformInfoWrapperPass>().getTTI(F);
     auto &DT = getAnalysis<DominatorTreeWrapperPass>().getDomTree();
     auto &AA = getAnalysis<AAResultsWrapperPass>().getAAResults();
-    VectorCombine Combiner(F, TTI, DT, AA, AC, false);
+    VectorCombine Combiner(F, TTI, DT, AA, AC, false, isVulkan);
     return Combiner.run();
   }
 };
@@ -1216,17 +1223,18 @@ INITIALIZE_PASS_DEPENDENCY(AssumptionCacheTracker)
 INITIALIZE_PASS_DEPENDENCY(DominatorTreeWrapperPass)
 INITIALIZE_PASS_END(VectorCombineLegacyPass, "vector-combine",
                     "Optimize scalar/vector ops", false, false)
-Pass *llvm::createVectorCombinePass() {
-  return new VectorCombineLegacyPass();
+Pass *llvm::createVectorCombinePass(bool isVulkan) {
+  return new VectorCombineLegacyPass(isVulkan);
 }
 
 PreservedAnalyses VectorCombinePass::run(Function &F,
-                                         FunctionAnalysisManager &FAM) {
+                                         FunctionAnalysisManager &FAM,
+                                         bool isVulkan) {
   auto &AC = FAM.getResult<AssumptionAnalysis>(F);
   TargetTransformInfo &TTI = FAM.getResult<TargetIRAnalysis>(F);
   DominatorTree &DT = FAM.getResult<DominatorTreeAnalysis>(F);
   AAResults &AA = FAM.getResult<AAManager>(F);
-  VectorCombine Combiner(F, TTI, DT, AA, AC, ScalarizationOnly);
+  VectorCombine Combiner(F, TTI, DT, AA, AC, ScalarizationOnly, isVulkan);
   if (!Combiner.run())
     return PreservedAnalyses::all();
   PreservedAnalyses PA;

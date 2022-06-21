@@ -633,19 +633,15 @@ public:
   /// in LangAS, otherwise returns default address space.
   LangAS asOpenCLLangAS() const {
     switch (getParsedKind()) {
-    case ParsedAttr::AT_OpenCLConstantAddressSpace:
+    case ParsedAttr::AT_ConstantAddressSpace:
       return LangAS::opencl_constant;
-    case ParsedAttr::AT_OpenCLGlobalAddressSpace:
+    case ParsedAttr::AT_GlobalAddressSpace:
       return LangAS::opencl_global;
-    case ParsedAttr::AT_OpenCLGlobalDeviceAddressSpace:
-      return LangAS::opencl_global_device;
-    case ParsedAttr::AT_OpenCLGlobalHostAddressSpace:
-      return LangAS::opencl_global_host;
-    case ParsedAttr::AT_OpenCLLocalAddressSpace:
+    case ParsedAttr::AT_LocalAddressSpace:
       return LangAS::opencl_local;
-    case ParsedAttr::AT_OpenCLPrivateAddressSpace:
+    case ParsedAttr::AT_PrivateAddressSpace:
       return LangAS::opencl_private;
-    case ParsedAttr::AT_OpenCLGenericAddressSpace:
+    case ParsedAttr::AT_GenericAddressSpace:
       return LangAS::opencl_generic;
     default:
       return LangAS::Default;
@@ -656,17 +652,13 @@ public:
   /// representation in LangAS, otherwise returns default address space.
   LangAS asSYCLLangAS() const {
     switch (getKind()) {
-    case ParsedAttr::AT_OpenCLGlobalAddressSpace:
+    case ParsedAttr::AT_GlobalAddressSpace:
       return LangAS::sycl_global;
-    case ParsedAttr::AT_OpenCLGlobalDeviceAddressSpace:
-      return LangAS::sycl_global_device;
-    case ParsedAttr::AT_OpenCLGlobalHostAddressSpace:
-      return LangAS::sycl_global_host;
-    case ParsedAttr::AT_OpenCLLocalAddressSpace:
+    case ParsedAttr::AT_LocalAddressSpace:
       return LangAS::sycl_local;
-    case ParsedAttr::AT_OpenCLPrivateAddressSpace:
+    case ParsedAttr::AT_PrivateAddressSpace:
       return LangAS::sycl_private;
-    case ParsedAttr::AT_OpenCLGenericAddressSpace:
+    case ParsedAttr::AT_GenericAddressSpace:
     default:
       return LangAS::Default;
     }

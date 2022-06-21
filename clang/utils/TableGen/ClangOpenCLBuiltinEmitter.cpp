@@ -775,8 +775,10 @@ static void OCL2Qual(Sema &S, const OpenCLTypeStruct &Ty,
       Records.getAllDerivedDefinitions("ImageType");
 
   // Map an image type name to its 3 access-qualified types (RO, WO, RW).
-  StringMap<SmallVector<Record *, 3>> ImageTypesMap;
+  //StringMap<SmallVector<Record *, 3>> ImageTypesMap;
+  StringMap<Record *> ImageTypesMap; // we have no access qualifiers
   for (auto *IT : ImageTypes) {
+#if 0
     auto Entry = ImageTypesMap.find(IT->getValueAsString("Name"));
     if (Entry == ImageTypesMap.end()) {
       SmallVector<Record *, 3> ImageList;
@@ -786,6 +788,10 @@ static void OCL2Qual(Sema &S, const OpenCLTypeStruct &Ty,
     } else {
       Entry->second.push_back(IT);
     }
+#else
+    ImageTypesMap.insert(
+	 std::make_pair(IT->getValueAsString("Name"), IT));
+#endif
   }
 
   // Emit the cases for the image types.  For an image type name, there are 3
@@ -794,6 +800,7 @@ static void OCL2Qual(Sema &S, const OpenCLTypeStruct &Ty,
   // corresponding QualType into "QT".
   for (const auto &ITE : ImageTypesMap) {
     OS << "    case OCLT_" << ITE.getKey() << ":\n"
+#if 0
        << "      switch (Ty.AccessQualifier) {\n"
        << "        case OCLAQ_None:\n"
        << "          llvm_unreachable(\"Image without access qualifier\");\n";
@@ -810,6 +817,12 @@ static void OCL2Qual(Sema &S, const OpenCLTypeStruct &Ty,
     }
     OS << "      }\n"
        << "      break;\n";
+#else
+       << "      QT.push_back("
+       << ITE.getValue()->getValueAsDef("QTExpr")->getValueAsString("TypeExpr")
+       << ");\n"
+       << "      break;\n";
+#endif
   }
 
   // Switch cases for generic types.

@@ -4495,6 +4495,18 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
       } else {
         CmdArgs.push_back("-emit-llvm-bc");
       }
+    } else if (JA.getType() == types::TY_LLVM_BC_32) {
+      CmdArgs.push_back("-emit-llvm-bc"); // order matters
+      CmdArgs.push_back("-llvm-bc-32");
+    } else if (JA.getType() == types::TY_LLVM_BC_50) {
+      CmdArgs.push_back("-emit-llvm-bc"); // order matters
+      CmdArgs.push_back("-llvm-bc-50");
+    } else if (JA.getType() == types::TY_SPIRV) {
+      CmdArgs.push_back("-emit-spirv");
+    } else if (JA.getType() == types::TY_SPIRVC) {
+      CmdArgs.push_back("-emit-spirv-container");
+    } else if (JA.getType() == types::TY_METALLIB) {
+      CmdArgs.push_back("-emit-metallib");
     } else if (JA.getType() == types::TY_IFS ||
                JA.getType() == types::TY_IFS_CPP) {
       StringRef ArgStr =
@@ -4524,7 +4536,7 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
     // loading the bitcode up in 'opt' or 'llc' and running passes gives the
     // same result as running passes here.  For LTO, we don't need to preserve
     // the use-list order, since serialization to bitcode is part of the flow.
-    if (JA.getType() == types::TY_LLVM_BC)
+    if (JA.getType() == types::TY_LLVM_BC) // NOTE: don't do this for 3.2
       CmdArgs.push_back("-emit-llvm-uselists");
 
     if (IsUsingLTO) {

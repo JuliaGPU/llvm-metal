@@ -46,10 +46,13 @@
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/PrettyStackTrace.h"
+#include "llvm/../../projects/spirv/include/LLVMSPIRVLib.h"
 #include "llvm/Support/TimeProfiler.h"
 #include "llvm/Support/Timer.h"
 #include "llvm/Support/ToolOutputFile.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/../../projects/spirv/lib/SPIRV/SPIRVWriterPass.h"
+#include "llvm/../../projects/spirv/lib/SPIRV/SPIRVContainerWriterPass.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Target/TargetOptions.h"
 #include "llvm/Transforms/Coroutines.h"
@@ -75,6 +78,7 @@
 #include "llvm/Transforms/Instrumentation/MemorySanitizer.h"
 #include "llvm/Transforms/Instrumentation/SanitizerCoverage.h"
 #include "llvm/Transforms/Instrumentation/ThreadSanitizer.h"
+#include "llvm/Transforms/LibFloor/FloorGPUTTI.h"
 #include "llvm/Transforms/ObjCARC.h"
 #include "llvm/Transforms/Scalar.h"
 #include "llvm/Transforms/Scalar/EarlyCSE.h"
@@ -87,6 +91,7 @@
 #include "llvm/Transforms/Utils/NameAnonGlobals.h"
 #include "llvm/Transforms/Utils/SymbolRewriter.h"
 #include <memory>
+#include <fstream>
 using namespace clang;
 using namespace llvm;
 
@@ -114,6 +119,13 @@ class EmitAssemblyHelper {
   TargetIRAnalysis getTargetIRAnalysis() const {
     if (TM)
       return TM->getTargetIRAnalysis();
+
+    if (LangOpts.OpenCL || LangOpts.Metal || LangOpts.Vulkan) {
+      // for OpenCL/Metal/Vulkan, provide our own TTI implementation
+      return TargetIRAnalysis([this](const Function &F) {
+        return TargetTransformInfo(LibFloorGPUTTIImpl(F, CodeGenOpts, TargetOpts, LangOpts, *TheModule));
+      });
+    }
 
     return TargetIRAnalysis();
   }
@@ -692,22 +704,26 @@ void EmitAssemblyHelper::CreatePasses(legacy::PassManager &MPM,
                                      /*DropTypeTests=*/true));
 
   PassManagerBuilderWrapper PMBuilder(TargetTriple, CodeGenOpts, LangOpts);
-
-  // At O0 and O1 we only run the always inliner which is more efficient. At
-  // higher optimization levels we run the normal inliner.
-  if (CodeGenOpts.OptimizationLevel <= 1) {
-    bool InsertLifetimeIntrinsics = ((CodeGenOpts.OptimizationLevel != 0 &&
-                                      !CodeGenOpts.DisableLifetimeMarkers) ||
-                                     LangOpts.Coroutines);
-    PMBuilder.Inliner = createAlwaysInlinerLegacyPass(InsertLifetimeIntrinsics);
+  // always inline everything for Metal/CUDA/OpenCL/Vulkan/Host-Compute, otherwise we run into trouble when fixing the IR
+  if (LangOpts.Metal || LangOpts.CUDA || LangOpts.OpenCL || LangOpts.Vulkan || LangOpts.FloorHostCompute) {
+    PMBuilder.Inliner = createEverythingInlinerPass();
   } else {
-    // We do not want to inline hot callsites for SamplePGO module-summary build
-    // because profile annotation will happen again in ThinLTO backend, and we
-    // want the IR of the hot path to match the profile.
-    PMBuilder.Inliner = createFunctionInliningPass(
-        CodeGenOpts.OptimizationLevel, CodeGenOpts.OptimizeSize,
-        (!CodeGenOpts.SampleProfileFile.empty() &&
-         CodeGenOpts.PrepareForThinLTO));
+    // At O0 and O1 we only run the always inliner which is more efficient. At
+    // higher optimization levels we run the normal inliner.
+    if (CodeGenOpts.OptimizationLevel <= 1) {
+      bool InsertLifetimeIntrinsics = ((CodeGenOpts.OptimizationLevel != 0 &&
+                                        !CodeGenOpts.DisableLifetimeMarkers) ||
+                                       LangOpts.Coroutines);
+      PMBuilder.Inliner = createAlwaysInlinerLegacyPass(InsertLifetimeIntrinsics);
+    } else {
+      // We do not want to inline hot callsites for SamplePGO module-summary build
+      // because profile annotation will happen again in ThinLTO backend, and we
+      // want the IR of the hot path to match the profile.
+      PMBuilder.Inliner = createFunctionInliningPass(
+          CodeGenOpts.OptimizationLevel, CodeGenOpts.OptimizeSize,
+          (!CodeGenOpts.SampleProfileFile.empty() &&
+           CodeGenOpts.PrepareForThinLTO));
+    }
   }
 
   PMBuilder.OptLevel = CodeGenOpts.OptimizationLevel;
@@ -728,6 +744,53 @@ void EmitAssemblyHelper::CreatePasses(legacy::PassManager &MPM,
   PMBuilder.RerollLoops = CodeGenOpts.RerollLoops;
 
   MPM.add(new TargetLibraryInfoWrapperPass(*TLII));
+
+  // close floor function info file, this is no longer needed
+  if ((LangOpts.Metal || LangOpts.CUDA || LangOpts.OpenCL || LangOpts.Vulkan || LangOpts.FloorHostCompute) &&
+      LangOpts.floor_function_info != nullptr) {
+    LangOpts.floor_function_info->close();
+    delete LangOpts.floor_function_info;
+  }
+  
+  PMBuilder.floor_image_capabilities = LangOpts.floor_image_capabilities;
+  
+  PMBuilder.EnableAddressSpaceFix = LangOpts.OpenCL;
+  if (PMBuilder.EnableAddressSpaceFix && CodeGenOpts.OptimizationLevel == 0) {
+    unsigned DiagID = Diags.getCustomDiagID(DiagnosticsEngine::Error, "compiling OpenCL/Metal/Vulkan with -O0 is not possible!");
+    Diags.Report(DiagID);
+    return;
+  }
+  
+  // only enable this for CUDA
+  PMBuilder.EnableCUDAPasses = LangOpts.CUDA;
+  
+  // only enable this for Metal/AIR
+  PMBuilder.EnableMetalPasses = LangOpts.Metal;
+  PMBuilder.EnableMetalIntelWorkarounds = CodeGenOpts.MetalIntelWorkarounds;
+  PMBuilder.EnableMetalNvidiaWorkarounds = CodeGenOpts.MetalNvidiaWorkarounds;
+  
+  // only enable this for OpenCL/SPIR and Vulkan/SPIR-V (don't want this for Metal)
+  PMBuilder.EnableSPIRPasses = (LangOpts.OpenCL &&
+                                (Triple(TheModule->getTargetTriple()).getArch() == Triple::spir64 ||
+                                 Triple(TheModule->getTargetTriple()).getArch() == Triple::spir));
+  PMBuilder.EnableSPIRIntelWorkarounds = CodeGenOpts.SPIRIntelWorkarounds;
+  PMBuilder.EnableVerifySPIR = PMBuilder.EnableSPIRPasses && LangOpts.CLVerifySPIR;
+  
+  // only enable this for Vulkan/SPIR-V
+  PMBuilder.EnableVulkanPasses = (PMBuilder.EnableSPIRPasses &&
+                                  Triple(TheModule->getTargetTriple()).getEnvironment() == Triple::Vulkan);
+  PMBuilder.EnableVulkanLLVMPreStructurizationPass = CodeGenOpts.VulkanLLVMPreStructurizationPass;
+
+  // don't enable any vectorization for Vulkan, this would lead to illegal pointer bitcasts and possibly unsupported vector dims
+  if (PMBuilder.EnableVulkanPasses) {
+    PMBuilder.SLPVectorize = false;
+    PMBuilder.LoopVectorize = false;
+  }
+  // for Metal: enable vectorization
+  if (PMBuilder.EnableMetalPasses) {
+    PMBuilder.SLPVectorize = true;
+    PMBuilder.LoopVectorize = true;
+  }
 
   if (TM)
     TM->adjustPassManager(PMBuilder);
@@ -849,6 +912,10 @@ void EmitAssemblyHelper::CreatePasses(legacy::PassManager &MPM,
   // Set up the per-module pass manager.
   if (!CodeGenOpts.RewriteMapFiles.empty())
     addSymbolRewriterPass(CodeGenOpts, &MPM);
+
+  if (LangOpts.OpenCL || LangOpts.CUDA) {
+    MPM.add(createInternalizePass());
+  }
 
   if (Optional<GCOVOptions> Options = getGCOVOptions(CodeGenOpts, LangOpts)) {
     MPM.add(createGCOVProfilerPass(*Options));
@@ -979,6 +1046,11 @@ void EmitAssemblyHelper::EmitAssemblyWithLegacyPassManager(
 
   bool UsesCodeGen = (Action != Backend_EmitNothing &&
                       Action != Backend_EmitBC &&
+                      Action != Backend_EmitBC32 &&
+                      Action != Backend_EmitBC50 &&
+                      Action != Backend_EmitSPIRV &&
+                      Action != Backend_EmitSPIRVContainer &&
+                      Action != Backend_EmitMetalLib &&
                       Action != Backend_EmitLL);
   CreateTargetMachine(UsesCodeGen);
 
@@ -1045,6 +1117,26 @@ void EmitAssemblyHelper::EmitAssemblyWithLegacyPassManager(
       PerModulePasses.add(createBitcodeWriterPass(
           *OS, CodeGenOpts.EmitLLVMUseLists, EmitLTOSummary));
     }
+    break;
+
+  case Backend_EmitBC32:
+    PerModulePasses.add(createBitcode32WriterPass(*OS));
+    break;
+
+  case Backend_EmitBC50:
+    PerModulePasses.add(createBitcode50WriterPass(*OS));
+    break;
+
+  case Backend_EmitSPIRV:
+    PerModulePasses.add(createSPIRVWriterPass(*OS));
+    break;
+
+  case Backend_EmitSPIRVContainer:
+    PerModulePasses.add(createSPIRVContainerWriterPass(*OS));
+    break;
+
+  case Backend_EmitMetalLib:
+    PerModulePasses.add(createMetalLibWriterPass(*OS));
     break;
 
   case Backend_EmitLL:
@@ -1458,6 +1550,33 @@ void EmitAssemblyHelper::RunOptimizationPipeline(
       MPM.addPass(
           BitcodeWriterPass(*OS, CodeGenOpts.EmitLLVMUseLists, EmitLTOSummary));
     }
+    break;
+
+  case Backend_EmitBC32:
+    MPM.addPass(Bitcode32WriterPass(*OS));
+    break;
+
+  case Backend_EmitBC50: {
+    bool EmitLTOSummary =
+        (CodeGenOpts.PrepareForLTO &&
+         !CodeGenOpts.DisableLLVMPasses &&
+         llvm::Triple(TheModule->getTargetTriple()).getVendor() !=
+             llvm::Triple::Apple);
+    MPM.addPass(BitcodeWriterPass50(*OS, CodeGenOpts.EmitLLVMUseLists,
+                                    EmitLTOSummary));
+    break;
+  }
+
+  case Backend_EmitSPIRV:
+    MPM.addPass(SPIRVWriterPass(*OS));
+    break;
+
+  case Backend_EmitSPIRVContainer:
+    MPM.addPass(SPIRVContainerWriterPass(*OS));
+    break;
+
+  case Backend_EmitMetalLib:
+    MPM.addPass(MetalLibWriterPass(*OS));
     break;
 
   case Backend_EmitLL:

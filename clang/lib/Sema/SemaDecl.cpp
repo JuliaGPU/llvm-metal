@@ -2648,7 +2648,7 @@ static bool mergeDeclAttribute(Sema &S, NamedDecl *D,
                                       &S.Context.Idents.get(AA->getSpelling()));
   else if (S.getLangOpts().CUDA && isa<FunctionDecl>(D) &&
            (isa<CUDAHostAttr>(Attr) || isa<CUDADeviceAttr>(Attr) ||
-            isa<CUDAGlobalAttr>(Attr))) {
+            isa<ComputeKernelAttr>(Attr))) {
     // CUDA target attributes are part of function signature for
     // overloading purposes and must not be merged.
     return false;
@@ -2824,6 +2824,12 @@ static void checkNewAttributesAfterDef(Sema &S, Decl *New, const Decl *Old) {
     } else if (isa<OMPDeclareVariantAttr>(NewAttribute)) {
       // We allow to add OMP[Begin]DeclareVariantAttr to be added to
       // declarations after defintions.
+      ++I;
+      continue;
+    }
+
+    if (isa<CUDADeviceAttr>(NewAttribute)) {
+      // since we're always compiling device code, but the device attr might not always be present (yet), allow this
       ++I;
       continue;
     }
@@ -6430,6 +6436,7 @@ bool Sema::inferObjCARCLifetime(ValueDecl *decl) {
 }
 
 void Sema::deduceOpenCLAddressSpace(ValueDecl *Decl) {
+#if 0 // we don't want this
   if (Decl->getType().hasAddressSpace())
     return;
   if (Decl->getType()->isDependentType())
@@ -6468,6 +6475,7 @@ void Sema::deduceOpenCLAddressSpace(ValueDecl *Decl) {
       Type = QualType(Context.getAsArrayType(Type), 0);
     Decl->setType(Type);
   }
+#endif
 }
 
 static void checkAttributesAfterMerging(Sema &S, NamedDecl &ND) {
@@ -6852,7 +6860,8 @@ static bool diagnoseOpenCLTypes(Sema &Se, VarDecl *NewVD) {
   }
 
   // OpenCL v1.0 s6.8.a.3: Pointers to functions are not allowed.
-  if (!Se.getOpenCLOptions().isAvailableOption("__cl_clang_function_pointers",
+  if (!Se.getLangOpts().CPlusPlus &&
+	  !Se.getOpenCLOptions().isAvailableOption("__cl_clang_function_pointers",
                                                Se.getLangOpts())) {
     QualType NR = R.getCanonicalType();
     while (NR->isPointerType() || NR->isMemberFunctionPointerType() ||
@@ -8001,12 +8010,27 @@ void Sema::CheckVariableDeclarationType(VarDecl *NewVD) {
 
   // OpenCL v1.2 s6.8 - The static qualifier is valid only in program
   // scope.
-  if (getLangOpts().OpenCLVersion == 120 &&
-      !getOpenCLOptions().isAvailableOption("cl_clang_storage_class_specifiers",
-                                            getLangOpts()) &&
-      NewVD->isStaticLocal()) {
-    Diag(NewVD->getLocation(), diag::err_static_function_scope);
-    NewVD->setInvalidDecl();
+  // (same for Metal/Vulkan, enabled for CUDA as well for compatibility)
+  if (NewVD->isStaticLocal() &&
+      ((getLangOpts().OpenCL &&
+        getLangOpts().OpenCLVersion >= 120 &&
+        !getOpenCLOptions().isAvailableOption("cl_clang_storage_class_specifiers", getLangOpts())) ||
+       getLangOpts().CUDA)) {
+    // however, if it is constexpr, this can be safely put into the constant address space
+    if (NewVD->isConstexpr()) {
+      // CUDA (backend) can handle this on its own
+      if (getLangOpts().OpenCL) {
+        QualType constant_T = Context.getAddrSpaceQualType(T, LangAS::opencl_constant);
+        TypeSourceInfo* constant_Tinfo = Context.getTrivialTypeSourceInfo(constant_T);
+        NewVD->setType(constant_Tinfo->getType());
+        NewVD->setTypeSourceInfo(constant_Tinfo);
+      }
+    }
+    // CUDA shared/local decls are allowed to be static, so ignore them
+    else if(!(getLangOpts().CUDA && NewVD->hasAttr<CUDASharedAttr>())) {
+      Diag(NewVD->getLocation(), diag::err_static_function_scope);
+      NewVD->setInvalidDecl();
+    }
     return;
   }
 
@@ -8036,16 +8060,46 @@ void Sema::CheckVariableDeclarationType(VarDecl *NewVD) {
       }
     }
 
-    // FIXME: Adding local AS in C++ for OpenCL might make sense.
-    if (NewVD->isFileVarDecl() || NewVD->isStaticLocal() ||
-        NewVD->hasExternalStorage()) {
-      if (!T->isSamplerT() && !T->isDependentType() &&
+    if (NewVD->isFileVarDecl() /*|| NewVD->isStaticLocal() ||
+        NewVD->hasExternalStorage()*/) {
+      if (!T->isSamplerT()) {
+        // if the variable doesn't have an address space, but is a global static const variable,
+        // automatically add the constant address space
+        if ((T.getAddressSpace() == LangAS::Default || T.getAddressSpace() == LangAS::opencl_private) &&
+            (NewVD->isStaticDataMember() || NewVD->hasGlobalStorage()) &&
+            T.isConstQualified()) {
+          QualType constant_T = Context.getAddrSpaceQualType(T, LangAS::opencl_constant);
+          TypeSourceInfo* constant_Tinfo = Context.getTrivialTypeSourceInfo(constant_T);
+          NewVD->setType(constant_Tinfo->getType());
+          NewVD->setTypeSourceInfo(constant_Tinfo);
+        } else {
+          int Scope = NewVD->isStaticLocal() | NewVD->hasExternalStorage() << 1;
+          if (!(T.getAddressSpace() == LangAS::opencl_constant ||
+                (T.getAddressSpace() == LangAS::opencl_global &&
+                 getLangOpts().OpenCLVersion >= 200))) {
+            if (getLangOpts().OpenCLVersion >= 200)
+              Diag(NewVD->getLocation(), diag::err_opencl_global_invalid_addr_space)
+                  << Scope << "global or constant";
+            else
+              Diag(NewVD->getLocation(), diag::err_opencl_global_invalid_addr_space)
+                  << Scope << "constant";
+            NewVD->setInvalidDecl();
+            return;
+          }
+        }
+      }
+    } else {
+      // TODO: does this need automatic "constant" handling?
+      // OpenCL C v2.0 s6.5.1 - Variables defined at program scope and static
+      // variables inside a function can also be declared in the global
+      // address space.
+      // FIXME: Adding local AS in C++ for OpenCL might make sense.
+      int Scope = NewVD->isStaticLocal() | NewVD->hasExternalStorage() << 1;
+      if (NewVD->isStaticLocal() &&
           !(T.getAddressSpace() == LangAS::opencl_constant ||
             (T.getAddressSpace() == LangAS::opencl_global &&
-             getOpenCLOptions().areProgramScopeVariablesSupported(
-                 getLangOpts())))) {
-        int Scope = NewVD->isStaticLocal() | NewVD->hasExternalStorage() << 1;
-        if (getOpenCLOptions().areProgramScopeVariablesSupported(getLangOpts()))
+             getLangOpts().OpenCLVersion >= 200))) {
+        if (getLangOpts().OpenCLVersion >= 200)
           Diag(NewVD->getLocation(), diag::err_opencl_global_invalid_addr_space)
               << Scope << "global or constant";
         else
@@ -8054,19 +8108,16 @@ void Sema::CheckVariableDeclarationType(VarDecl *NewVD) {
         NewVD->setInvalidDecl();
         return;
       }
-    } else {
-      if (T.getAddressSpace() == LangAS::opencl_global) {
-        Diag(NewVD->getLocation(), diag::err_opencl_function_variable)
-            << 1 /*is any function*/ << "global";
-        NewVD->setInvalidDecl();
-        return;
-      }
+
+      // OpenCL v1.1 s6.5.2 and s6.5.3 no local or constant variables
+      // in functions.
+#if 0 // everything gets inlined, so there is no need for this
       if (T.getAddressSpace() == LangAS::opencl_constant ||
           T.getAddressSpace() == LangAS::opencl_local) {
         FunctionDecl *FD = getCurFunctionDecl();
         // OpenCL v1.1 s6.5.2 and s6.5.3: no local or constant variables
         // in functions.
-        if (FD && !FD->hasAttr<OpenCLKernelAttr>()) {
+        if (FD && !FD->hasAttr<ComputeKernelAttr>()) {
           if (T.getAddressSpace() == LangAS::opencl_constant)
             Diag(NewVD->getLocation(), diag::err_opencl_function_variable)
                 << 0 /*non-kernel only*/ << "constant";
@@ -8078,7 +8129,7 @@ void Sema::CheckVariableDeclarationType(VarDecl *NewVD) {
         }
         // OpenCL v2.0 s6.5.2 and s6.5.3: local and constant variables must be
         // in the outermost scope of a kernel function.
-        if (FD && FD->hasAttr<OpenCLKernelAttr>()) {
+        if (FD && FD->hasAttr<ComputeKernelAttr>()) {
           if (!getCurScope()->isFunctionScope()) {
             if (T.getAddressSpace() == LangAS::opencl_constant)
               Diag(NewVD->getLocation(), diag::err_opencl_addrspace_scope)
@@ -8099,6 +8150,7 @@ void Sema::CheckVariableDeclarationType(VarDecl *NewVD) {
         NewVD->setInvalidDecl();
         return;
       }
+#endif
     }
   }
 
@@ -8737,7 +8789,7 @@ static bool isOpenCLSizeDependentType(ASTContext &C, QualType Ty) {
   return false;
 }
 
-static OpenCLParamType getOpenCLKernelParameterType(Sema &S, QualType PT) {
+static OpenCLParamType getOpenCLKernelParameterType(Sema &S, QualType PT, const bool is_metal) {
   if (PT->isDependentType())
     return InvalidKernelParam;
 
@@ -8745,13 +8797,15 @@ static OpenCLParamType getOpenCLKernelParameterType(Sema &S, QualType PT) {
     QualType PointeeType = PT->getPointeeType();
     if (PointeeType.getAddressSpace() == LangAS::opencl_generic ||
         PointeeType.getAddressSpace() == LangAS::opencl_private ||
+        // NOTE: we do not support local address space kernel pointers!
+        PointeeType.getAddressSpace() == LangAS::opencl_local ||
         PointeeType.getAddressSpace() == LangAS::Default)
       return InvalidAddrSpacePtrKernelParam;
 
     if (PointeeType->isPointerType()) {
       // This is a pointer to pointer parameter.
       // Recursively check inner type.
-      OpenCLParamType ParamKind = getOpenCLKernelParameterType(S, PointeeType);
+      OpenCLParamType ParamKind = getOpenCLKernelParameterType(S, PointeeType, is_metal);
       if (ParamKind == InvalidAddrSpacePtrKernelParam ||
           ParamKind == InvalidKernelParam)
         return ParamKind;
@@ -8791,7 +8845,7 @@ static OpenCLParamType getOpenCLKernelParameterType(Sema &S, QualType PT) {
   // This extension adds support for half scalar and vector types as built-in
   // types that can be used for arithmetic operations, conversions etc.
   if (!S.getOpenCLOptions().isAvailableOption("cl_khr_fp16", S.getLangOpts()) &&
-      PT->isHalfType())
+      PT->isHalfType() && !is_metal)
     return InvalidKernelParam;
 
   // Look into an array argument to check if it has a forbidden type.
@@ -8800,7 +8854,7 @@ static OpenCLParamType getOpenCLKernelParameterType(Sema &S, QualType PT) {
     // Call ourself to check an underlying type of an array. Since the
     // getPointeeOrArrayElementType returns an innermost type which is not an
     // array, this recursive call only happens once.
-    return getOpenCLKernelParameterType(S, QualType(UnderlyingTy, 0));
+    return getOpenCLKernelParameterType(S, QualType(UnderlyingTy, 0), is_metal);
   }
 
   // C++ for OpenCL v1.0 s2.4:
@@ -8813,6 +8867,12 @@ static OpenCLParamType getOpenCLKernelParameterType(Sema &S, QualType PT) {
       !PT->isOpenCLSpecificType() && !PT.isPODType(S.Context))
     return InvalidKernelParam;
 
+  if (PT->isEventT())
+    return InvalidKernelParam;
+
+  if (PT->isReserveIDT())
+    return InvalidKernelParam;
+
   if (PT->isRecordType())
     return RecordKernelParam;
 
@@ -8823,7 +8883,8 @@ static void checkIsValidOpenCLKernelParameter(
   Sema &S,
   Declarator &D,
   ParmVarDecl *Param,
-  llvm::SmallPtrSetImpl<const Type *> &ValidTypes) {
+  llvm::SmallPtrSetImpl<const Type *> &ValidTypes,
+  const bool is_metal) {
   QualType PT = Param->getType();
 
   // Cache the valid types we encounter to avoid rechecking structs that are
@@ -8831,7 +8892,7 @@ static void checkIsValidOpenCLKernelParameter(
   if (ValidTypes.count(PT.getTypePtr()))
     return;
 
-  switch (getOpenCLKernelParameterType(S, PT)) {
+  switch (getOpenCLKernelParameterType(S, PT, is_metal)) {
   case PtrPtrKernelParam:
     // OpenCL v3.0 s6.11.a:
     // A kernel function argument cannot be declared as a pointer to a pointer
@@ -8921,6 +8982,8 @@ static void checkIsValidOpenCLKernelParameter(
       continue;
     }
 
+    // TODO: this should also check base classes
+
     // Adds everything except the original parameter declaration (which is not a
     // field itself) to the history stack.
     const RecordDecl *RD;
@@ -8942,13 +9005,17 @@ static void checkIsValidOpenCLKernelParameter(
     // Add a null marker so we know when we've gone back up a level
     VisitStack.push_back(nullptr);
 
+    // if this is an aggregate of images, all is well
+    if (RD->getTypeForDecl()->isAggregateImageType())
+      continue;
+
     for (const auto *FD : RD->fields()) {
       QualType QT = FD->getType();
 
       if (ValidTypes.count(QT.getTypePtr()))
         continue;
 
-      OpenCLParamType ParamType = getOpenCLKernelParameterType(S, QT);
+      OpenCLParamType ParamType = getOpenCLKernelParameterType(S, QT, is_metal);
       if (ParamType == ValidKernelParam)
         continue;
 
@@ -9559,6 +9626,7 @@ Sema::ActOnFunctionDeclarator(Scope *S, Declarator &D, DeclContext *DC,
   // Handle attributes.
   ProcessDeclAttributes(S, NewFD, D);
 
+#if 0 // we don't want this
   if (getLangOpts().OpenCL) {
     // OpenCL v1.1 s6.5: Using an address space qualifier in a function return
     // type declaration will generate a compilation error.
@@ -9569,6 +9637,7 @@ Sema::ActOnFunctionDeclarator(Scope *S, Declarator &D, DeclContext *DC,
       NewFD->setInvalidDecl();
     }
   }
+#endif
 
   checkTypeSupport(NewFD->getType(), D.getBeginLoc(), NewFD);
 
@@ -9957,7 +10026,7 @@ Sema::ActOnFunctionDeclarator(Scope *S, Declarator &D, DeclContext *DC,
     // -fcuda-allow-variadic-functions.
     if (!getLangOpts().CUDAAllowVariadicFunctions && NewFD->isVariadic() &&
         (NewFD->hasAttr<CUDADeviceAttr>() ||
-         NewFD->hasAttr<CUDAGlobalAttr>()) &&
+         NewFD->hasAttr<ComputeKernelAttr>()) &&
         !(II && II->isStr("printf") && NewFD->isExternC() &&
           !D.isFunctionDefinition())) {
       Diag(NewFD->getLocation(), diag::err_variadic_device_fn);
@@ -9967,14 +10036,8 @@ Sema::ActOnFunctionDeclarator(Scope *S, Declarator &D, DeclContext *DC,
   MarkUnusedFileScopedDecl(NewFD);
 
 
-
-  if (getLangOpts().OpenCL && NewFD->hasAttr<OpenCLKernelAttr>()) {
-    // OpenCL v1.2 s6.8 static is invalid for kernel functions.
-    if (SC == SC_Static) {
-      Diag(D.getIdentifierLoc(), diag::err_static_kernel);
-      D.setInvalidType();
-    }
-
+  if (getLangOpts().OpenCL && (NewFD->hasAttr<ComputeKernelAttr>() ||
+                               NewFD->hasAttr<GraphicsTessellationControlShaderAttr>())) {
     // OpenCL v1.2, s6.9 -- Kernels can only have return type void.
     if (!NewFD->getReturnType()->isVoidType()) {
       SourceRange RTRange = NewFD->getReturnTypeSourceRange();
@@ -9983,10 +10046,25 @@ Sema::ActOnFunctionDeclarator(Scope *S, Declarator &D, DeclContext *DC,
                                 : FixItHint());
       D.setInvalidType();
     }
+  }
 
-    llvm::SmallPtrSet<const Type *, 16> ValidTypes;
-    for (auto Param : NewFD->parameters())
-      checkIsValidOpenCLKernelParameter(*this, D, Param, ValidTypes);
+  if (NewFD->hasAttr<ComputeKernelAttr>() ||
+      NewFD->hasAttr<GraphicsVertexShaderAttr>() ||
+      NewFD->hasAttr<GraphicsFragmentShaderAttr>() ||
+      NewFD->hasAttr<GraphicsTessellationControlShaderAttr>() ||
+      NewFD->hasAttr<GraphicsTessellationEvaluationShaderAttr>()) {
+    // static is invalid for kernel/shader functions.
+    if (SC == SC_Static) {
+      Diag(D.getIdentifierLoc(), diag::err_static_kernel);
+      D.setInvalidType();
+    }
+
+    // only check this for OpenCL/Metal/Vulkan
+    if (getLangOpts().OpenCL) {
+      llvm::SmallPtrSet<const Type *, 16> ValidTypes;
+      for (auto Param : NewFD->parameters())
+        checkIsValidOpenCLKernelParameter(*this, D, Param, ValidTypes, getLangOpts().Metal);
+	}
 
     if (getLangOpts().OpenCLCPlusPlus) {
       if (DC->isRecord()) {
@@ -11086,7 +11164,11 @@ bool Sema::CheckFunctionDeclaration(Scope *S, FunctionDecl *NewFD,
     // the function returns a UDT (class, struct, or union type) that is not C
     // compatible, and if it does, warn the user.
     // But, issue any diagnostic on the first declaration only.
-    if (Previous.empty() && NewFD->isExternC()) {
+    if (Previous.empty() && NewFD->isExternC() &&
+        // ignore this for vertex/fragment/tess-eval shaders
+        !NewFD->hasAttr<GraphicsVertexShaderAttr>() &&
+        !NewFD->hasAttr<GraphicsFragmentShaderAttr>() &&
+        !NewFD->hasAttr<GraphicsTessellationEvaluationShaderAttr>()) {
       QualType R = NewFD->getReturnType();
       if (R->isIncompleteType() && !R->isVoidType())
         Diag(NewFD->getLocation(), diag::warn_return_value_udt_incomplete)
@@ -11167,9 +11249,9 @@ void Sema::CheckMain(FunctionDecl* FD, const DeclSpec& DS) {
     FD->setConstexprKind(ConstexprSpecKind::Unspecified);
   }
 
-  if (getLangOpts().OpenCL) {
+  if (getLangOpts().OpenCL || getLangOpts().CUDA) {
     Diag(FD->getLocation(), diag::err_opencl_no_main)
-        << FD->hasAttr<OpenCLKernelAttr>();
+        << FD->hasAttr<ComputeKernelAttr>();
     FD->setInvalidDecl();
     return;
   }
@@ -12422,10 +12504,12 @@ void Sema::AddInitializerToDecl(Decl *RealDecl, Expr *Init, bool DirectInit) {
     if (VDecl->isInvalidDecl()) {
       // do nothing
 
+#if 0 // we don't want this
     // OpenCL v1.2 s6.5.3: __constant locals must be constant-initialized.
     // This is true even in C++ for OpenCL.
     } else if (VDecl->getType().getAddressSpace() == LangAS::opencl_constant) {
       CheckForConstantInitializer(Init, DclT);
+#endif
 
     // Otherwise, C++ does not restrict the initializer.
     } else if (getLangOpts().CPlusPlus) {
@@ -12706,6 +12790,7 @@ void Sema::ActOnUninitializedDecl(Decl *RealDecl) {
       }
     }
 
+#if 0 // allow this for now, we need to be able to have "static const" class variables that are initialized later
     // OpenCL v1.1 s6.5.3: variables declared in the constant address space must
     // be initialized.
     if (!Var->isInvalidDecl() &&
@@ -12727,6 +12812,7 @@ void Sema::ActOnUninitializedDecl(Decl *RealDecl) {
         return;
       }
     }
+#endif
 
     if (!Var->isInvalidDecl() && RealDecl->hasAttr<LoaderUninitializedAttr>()) {
       if (Var->getStorageClass() == SC_Extern) {
@@ -13424,6 +13510,7 @@ void Sema::FinalizeDeclaration(Decl *ThisDecl) {
   if (VD->isStaticLocal())
     CheckStaticLocalForDllExport(VD);
 
+#if 0 // we don't want this
   // Perform check for initializers of device-side global variables.
   // CUDA allows empty constructors as initializers (see E.2.3.1, CUDA
   // 7.5). We must also apply the same checks to all __shared__
@@ -13431,6 +13518,7 @@ void Sema::FinalizeDeclaration(Decl *ThisDecl) {
   // constant initializers for __constant__ and __device__ variables.
   if (getLangOpts().CUDA)
     checkAllowedCUDAInitializer(VD);
+#endif
 
   // Grab the dllimport or dllexport attribute off of the VarDecl.
   const InheritableAttr *DLLAttr = getDLLAttr(VD);
@@ -13958,7 +14046,7 @@ ParmVarDecl *Sema::CheckParameter(DeclContext *DC, SourceLocation StartLoc,
   if (T.getAddressSpace() != LangAS::Default &&
       // OpenCL allows function arguments declared to be an array of a type
       // to be qualified with an address space.
-      !(getLangOpts().OpenCL &&
+      !((getLangOpts().OpenCL || getLangOpts().CUDA) &&
         (T->isArrayType() || T.getAddressSpace() == LangAS::opencl_private))) {
     Diag(NameLoc, diag::err_arg_with_address_space);
     New->setInvalidDecl();
@@ -13967,6 +14055,13 @@ ParmVarDecl *Sema::CheckParameter(DeclContext *DC, SourceLocation StartLoc,
   // PPC MMA non-pointer types are not allowed as function argument types.
   if (Context.getTargetInfo().getTriple().isPPC64() &&
       CheckPPCMMAType(New->getOriginalType(), New->getLocation())) {
+    New->setInvalidDecl();
+  }
+
+  // Passing pointer to image is invalid in OpenCL.
+  if (getLangOpts().OpenCL && T->isPointerType() &&
+      T->getPointeeType()->isImageType()) {
+    Diag(NameLoc, diag::err_pointer_to_image);
     New->setInvalidDecl();
   }
 
@@ -14007,6 +14102,28 @@ void Sema::ActOnFinishKNRParamDeclarations(Scope *S, Declarator &D,
       }
     }
   }
+}
+
+static void AggregateTypeCompleter(Sema& S, const CXXRecordDecl* decl) {
+	if(decl == nullptr) return;
+	
+	// make sure decl is complete
+	S.RequireCompleteType(decl->getBeginLoc(), QualType(decl->getTypeForDecl(), 0),
+						  diag::err_typecheck_decl_incomplete_type);
+	
+	// must have definition
+	if(!decl->hasDefinition()) return;
+	
+	// iterate over / recurse into all bases, and complete all their fields
+	for(const auto& base : decl->bases()) {
+		AggregateTypeCompleter(S, base.getType()->getAsCXXRecordDecl());
+	}
+	
+	// iterate over and complete all fields
+	for(const auto& field : decl->fields()) {
+		S.RequireCompleteType(field->getBeginLoc(), field->getType(),
+							  diag::err_typecheck_decl_incomplete_type);
+	}
 }
 
 Decl *
@@ -14076,8 +14193,12 @@ ShouldWarnAboutMissingPrototype(const FunctionDecl *FD,
   if (FD->isFunctionTemplateSpecialization())
     return false;
 
-  // Don't warn for OpenCL kernels.
-  if (FD->hasAttr<OpenCLKernelAttr>())
+  // Don't warn for compute kernels or shaders.
+  if (FD->hasAttr<ComputeKernelAttr>() ||
+      FD->hasAttr<GraphicsVertexShaderAttr>() ||
+      FD->hasAttr<GraphicsFragmentShaderAttr>() ||
+      FD->hasAttr<GraphicsTessellationControlShaderAttr>() ||
+      FD->hasAttr<GraphicsTessellationEvaluationShaderAttr>())
     return false;
 
   // Don't warn on explicitly deleted functions.
@@ -14327,6 +14448,33 @@ Decl *Sema::ActOnStartOfFunctionDef(Scope *FnBodyScope, Decl *D,
         for (auto *EI : ED->enumerators())
           PushOnScopeChains(EI, FnBodyScope, /*AddToContext=*/false);
       }
+    }
+  }
+
+  // for kernel and shader functions: make sure that function parameter types are complete,
+  // including pointer/pointee types that must always be complete as well, since their sizes
+  // and (possibly) structure need to be known later on
+  if(FD->hasAttr<ComputeKernelAttr>() ||
+     FD->hasAttr<GraphicsVertexShaderAttr>() ||
+     FD->hasAttr<GraphicsFragmentShaderAttr>() ||
+     FD->hasAttr<GraphicsTessellationControlShaderAttr>() ||
+     FD->hasAttr<GraphicsTessellationEvaluationShaderAttr>()) {
+    for (const auto& Param : FD->parameters()) {
+      const auto param_type = Param->getType();
+      const CXXRecordDecl* cxx_rdecl = nullptr;
+      if(param_type->isPointerType()) {
+        const auto pointee_type = param_type->getPointeeType();
+        RequireCompleteType(Param->getLocation(), pointee_type,
+                            diag::err_typecheck_decl_incomplete_type);
+        cxx_rdecl = pointee_type->getAsCXXRecordDecl();
+      } else {
+        RequireCompleteType(Param->getLocation(), param_type,
+                            diag::err_typecheck_decl_incomplete_type);
+        cxx_rdecl = param_type->getAsCXXRecordDecl();
+      }
+
+      // if this is an aggregate, ensure that all contained types are also complete
+      AggregateTypeCompleter(*this, cxx_rdecl);
     }
   }
 
@@ -15154,8 +15302,8 @@ void Sema::AddKnownFunctionAttributes(FunctionDecl *FD) {
       if (getLangOpts().CUDAIsDevice !=
           Context.BuiltinInfo.isAuxBuiltinID(BuiltinID))
         FD->addAttr(CUDADeviceAttr::CreateImplicit(Context, FD->getLocation()));
-      else
-        FD->addAttr(CUDAHostAttr::CreateImplicit(Context, FD->getLocation()));
+      //else
+      //  FD->addAttr(CUDAHostAttr::CreateImplicit(Context, FD->getLocation()));
     }
 
     // Add known guaranteed alignment for allocation functions.
@@ -16934,7 +17082,8 @@ FieldDecl *Sema::CheckFieldDecl(DeclarationName Name, QualType T,
   if (LangOpts.OpenCL) {
     // OpenCL v1.2 s6.9b,r & OpenCL v2.0 s6.12.5 - The following types cannot be
     // used as structure or union field: image, sampler, event or block types.
-    if (T->isEventT() || T->isImageType() || T->isSamplerT() ||
+    // NOTE: image types are allowed and necessary part of aggregate images
+    if (T->isEventT() /* || T->isImageType() */ || T->isSamplerT() ||
         T->isBlockPointerType()) {
       Diag(Loc, diag::err_opencl_type_struct_or_union_field) << T;
       Record->setInvalidDecl();
@@ -16943,7 +17092,8 @@ FieldDecl *Sema::CheckFieldDecl(DeclarationName Name, QualType T,
     // OpenCL v1.2 s6.9.c: bitfields are not supported, unless Clang extension
     // is enabled.
     if (BitWidth && !getOpenCLOptions().isAvailableOption(
-                        "__cl_clang_bitfields", LangOpts)) {
+                        "__cl_clang_bitfields", LangOpts) &&
+        !getLangOpts().CPlusPlus) {
       Diag(Loc, diag::err_opencl_bitfields);
       InvalidDecl = true;
     }

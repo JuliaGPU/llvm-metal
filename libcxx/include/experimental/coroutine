@@ -251,7 +251,7 @@ public:
         typedef typename remove_cv<_Promise>::type _RawPromise;
         coroutine_handle __tmp;
         __tmp.__handle_ = __builtin_coro_promise(
-            _VSTD::addressof(const_cast<_RawPromise&>(__promise)),
+            __builtin_addressof(const_cast<_RawPromise&>(__promise)),
              _LIBCPP_ALIGNOF(_Promise), true);
         return __tmp;
     }

@@ -142,7 +142,7 @@ Pass *createLoadStoreVectorizerPass();
 //
 // Optimize partial vector operations using target cost models.
 //
-Pass *createVectorCombinePass();
+Pass *createVectorCombinePass(bool isVulkan = false);
 
 } // End llvm namespace
 

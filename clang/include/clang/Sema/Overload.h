@@ -184,6 +184,9 @@ class Sema;
     /// Zero constant to queue
     ICK_Zero_Queue_Conversion,
 
+    /// Integer constant to OpenCL sampler
+    ICK_Int_Sampler_Conversion,
+
     /// Conversions allowed in C, but not C++
     ICK_C_Only_Conversion,
 
@@ -767,6 +770,8 @@ class Sema;
     /// (CUDA) This candidate was not viable because the callee
     /// was not accessible from the caller's target (i.e. host->device,
     /// global->host, device->host).
+    /// (OpenCL) This candidate was not viable because the callee
+    /// uses extensions that are not enabled or supported.
     ovl_fail_bad_target,
 
     /// This candidate function was not viable because an enable_if

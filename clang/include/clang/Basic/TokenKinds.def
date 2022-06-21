@@ -566,35 +566,20 @@ KEYWORD(__forceinline               , KEYMS)
 KEYWORD(__unaligned                 , KEYMS)
 KEYWORD(__super                     , KEYMS)
 
-// OpenCL address space qualifiers
-KEYWORD(__global                    , KEYOPENCLC | KEYOPENCLCXX)
-KEYWORD(__local                     , KEYOPENCLC | KEYOPENCLCXX)
-KEYWORD(__constant                  , KEYOPENCLC | KEYOPENCLCXX)
-KEYWORD(__private                   , KEYOPENCLC | KEYOPENCLCXX)
-KEYWORD(__generic                   , KEYOPENCLC | KEYOPENCLCXX)
-ALIAS("global", __global            , KEYOPENCLC | KEYOPENCLCXX)
-ALIAS("local", __local              , KEYOPENCLC | KEYOPENCLCXX)
-ALIAS("constant", __constant        , KEYOPENCLC | KEYOPENCLCXX)
-ALIAS("private", __private          , KEYOPENCLC)
-ALIAS("generic", __generic          , KEYOPENCLC | KEYOPENCLCXX)
-// OpenCL function qualifiers
-KEYWORD(__kernel                    , KEYOPENCLC | KEYOPENCLCXX)
-ALIAS("kernel", __kernel            , KEYOPENCLC | KEYOPENCLCXX)
-// OpenCL access qualifiers
-KEYWORD(__read_only                 , KEYOPENCLC | KEYOPENCLCXX)
-KEYWORD(__write_only                , KEYOPENCLC | KEYOPENCLCXX)
-KEYWORD(__read_write                , KEYOPENCLC | KEYOPENCLCXX)
-ALIAS("read_only", __read_only      , KEYOPENCLC | KEYOPENCLCXX)
-ALIAS("write_only", __write_only    , KEYOPENCLC | KEYOPENCLCXX)
-ALIAS("read_write", __read_write    , KEYOPENCLC | KEYOPENCLCXX)
+
 // OpenCL builtins
-KEYWORD(__builtin_astype            , KEYOPENCLC | KEYOPENCLCXX)
-UNARY_EXPR_OR_TYPE_TRAIT(vec_step, VecStep, KEYOPENCLC | KEYOPENCLCXX | KEYALTIVEC | KEYZVECTOR)
-#define GENERIC_IMAGE_TYPE(ImgType, Id) KEYWORD(ImgType##_t, KEYOPENCLC | KEYOPENCLCXX)
-#include "clang/Basic/OpenCLImageTypes.def"
-KEYWORD(pipe                        , KEYOPENCLC | KEYOPENCLCXX)
+KEYWORD(__builtin_astype            , KEYCXX | KEYOPENCLC | KEYOPENCLCXX)
+KEYWORD(sampler_t                   , KEYCXX | KEYOPENCLC | KEYOPENCLCXX)
+KEYWORD(event_t                     , KEYCXX | KEYOPENCLC| KEYOPENCLCXX)
+UNARY_EXPR_OR_TYPE_TRAIT(vec_step, VecStep, KEYCXX | KEYOPENCLC | KEYOPENCLCXX | KEYALTIVEC | KEYZVECTOR)
+
+// OpenCL 2.0
+KEYWORD(queue_t                     , KEYCXX | KEYOPENCLC | KEYOPENCLCXX)
+KEYWORD(clk_event_t                 , KEYCXX | KEYOPENCLC | KEYOPENCLCXX)
+KEYWORD(reserve_id_t                , KEYCXX | KEYOPENCLC | KEYOPENCLCXX)
+KEYWORD(pipe                        , KEYCXX | KEYOPENCLC | KEYOPENCLCXX)
 // C++ for OpenCL s2.3.1: addrspace_cast operator
-KEYWORD(addrspace_cast              , KEYOPENCLCXX)
+KEYWORD(addrspace_cast              , KEYCXX | KEYOPENCLC | KEYOPENCLCXX)
 
 // OpenMP Type Traits
 UNARY_EXPR_OR_TYPE_TRAIT(__builtin_omp_required_simd_align, OpenMPRequiredSimdAlign, KEYALL)

@@ -142,6 +142,7 @@ def True : Predicate<"true">;
 def hasPTX31 : Predicate<"Subtarget->getPTXVersion() >= 31">;
 def hasPTX60 : Predicate<"Subtarget->getPTXVersion() >= 60">;
 def hasPTX61 : Predicate<"Subtarget->getPTXVersion() >= 61">;
+def hasPTX62 : Predicate<"Subtarget->getPTXVersion() >= 62">;
 def hasPTX63 : Predicate<"Subtarget->getPTXVersion() >= 63">;
 def hasPTX64 : Predicate<"Subtarget->getPTXVersion() >= 64">;
 def hasPTX65 : Predicate<"Subtarget->getPTXVersion() >= 65">;

@@ -2028,8 +2028,14 @@ Value *ScalarExprEmitter::VisitCastExpr(CastExpr *CE) {
     llvm::Type *DstTy = ConvertType(DestTy);
     if (SrcTy->isPtrOrPtrVectorTy() && DstTy->isPtrOrPtrVectorTy() &&
         SrcTy->getPointerAddressSpace() != DstTy->getPointerAddressSpace()) {
-      llvm_unreachable("wrong cast for pointers in different address spaces"
-                       "(must be an address space cast)!");
+      // allow this with OpenCL/Metal/Vulkan
+      if (CGF.getLangOpts().OpenCL) {
+        llvm::Type *MidTy = CGF.CGM.getDataLayout().getIntPtrType(SrcTy);
+        return Builder.CreateIntToPtr(Builder.CreatePtrToInt(Src, MidTy), DstTy);
+      } else {
+        llvm_unreachable("wrong cast for pointers in different address spaces"
+                         "(must be an address space cast)!");
+      }
     }
 
     if (CGF.SanOpts.has(SanitizerKind::CFIUnrelatedCast)) {
@@ -2402,6 +2408,7 @@ Value *ScalarExprEmitter::VisitCastExpr(CastExpr *CE) {
                                          CE->getExprLoc());
   }
 
+  case CK_ZeroToOCLEvent:
   case CK_ZeroToOCLOpaqueType: {
     assert((DestTy->isEventT() || DestTy->isQueueT() ||
             DestTy->isOCLIntelSubgroupAVCType()) &&
@@ -2409,8 +2416,25 @@ Value *ScalarExprEmitter::VisitCastExpr(CastExpr *CE) {
     return llvm::Constant::getNullValue(ConvertType(DestTy));
   }
 
-  case CK_IntToOCLSampler:
-    return CGF.CGM.createOpenCLIntToSamplerConversion(E, CGF);
+  case CK_ZeroToOCLQueue: {
+    assert(DestTy->isQueueT() && "CK_ZeroToOCLQueue cast on non queue_t type");
+    return llvm::Constant::getNullValue(ConvertType(DestTy));
+  }
+
+  case CK_IntToOCLSampler: {
+    assert(DestTy->isSamplerT() && "CK_IntToOCLSampler cast to non sampler type");
+    if (!CGF.CGM.getLangOpts().CLSamplerOpaque)
+      return Visit(E);
+    if (const CastExpr* SCE = dyn_cast<CastExpr>(E)) {
+      if (const DeclRefExpr *DRE = cast<DeclRefExpr>(SCE->getSubExpr())) {
+        if (const VarDecl *VD = cast<VarDecl>(DRE->getDecl())) {
+          assert(VD->getInit() && "Invalid sampler initializer");
+          E = const_cast<Expr*>(VD->getInit());
+        }
+      }
+    }
+    return CGF.CGM.createIntToSamplerConversion(E, &CGF);
+  }
 
   } // end of switch
 
@@ -3526,9 +3550,9 @@ static Value *emitPointerArithmetic(CodeGenFunction &CGF,
   // GNU void* casts amount to no-ops since our void* type is i8*, but this is
   // future proof.
   if (elementType->isVoidType() || elementType->isFunctionType()) {
-    Value *result = CGF.EmitCastToVoidPtr(pointer);
+    Value *result = CGF.Builder.CreatePointerCast(pointer, CGF.VoidPtrTy);
     result = CGF.Builder.CreateGEP(CGF.Int8Ty, result, index, "add.ptr");
-    return CGF.Builder.CreateBitCast(result, pointer->getType());
+    return CGF.Builder.CreatePointerCast(result, pointer->getType());
   }
 
   if (CGF.getLangOpts().isSignedOverflowDefined())
@@ -4597,33 +4621,9 @@ VisitAbstractConditionalOperator(const AbstractConditionalOperator *E) {
     llvm::Type *condType = ConvertType(condExpr->getType());
     auto *vecTy = cast<llvm::FixedVectorType>(condType);
 
-    unsigned numElem = vecTy->getNumElements();
-    llvm::Type *elemType = vecTy->getElementType();
-
     llvm::Value *zeroVec = llvm::Constant::getNullValue(vecTy);
     llvm::Value *TestMSB = Builder.CreateICmpSLT(CondV, zeroVec);
-    llvm::Value *tmp = Builder.CreateSExt(
-        TestMSB, llvm::FixedVectorType::get(elemType, numElem), "sext");
-    llvm::Value *tmp2 = Builder.CreateNot(tmp);
-
-    // Cast float to int to perform ANDs if necessary.
-    llvm::Value *RHSTmp = RHS;
-    llvm::Value *LHSTmp = LHS;
-    bool wasCast = false;
-    llvm::VectorType *rhsVTy = cast<llvm::VectorType>(RHS->getType());
-    if (rhsVTy->getElementType()->isFloatingPointTy()) {
-      RHSTmp = Builder.CreateBitCast(RHS, tmp2->getType());
-      LHSTmp = Builder.CreateBitCast(LHS, tmp->getType());
-      wasCast = true;
-    }
-
-    llvm::Value *tmp3 = Builder.CreateAnd(RHSTmp, tmp2);
-    llvm::Value *tmp4 = Builder.CreateAnd(LHSTmp, tmp);
-    llvm::Value *tmp5 = Builder.CreateOr(tmp3, tmp4, "cond");
-    if (wasCast)
-      tmp5 = Builder.CreateBitCast(tmp5, RHS->getType());
-
-    return tmp5;
+    return Builder.CreateSelect(TestMSB, LHS, RHS);
   }
 
   if (condExpr->getType()->isVectorType()) {
@@ -4830,6 +4830,9 @@ Value *ScalarExprEmitter::VisitAsTypeExpr(AsTypeExpr *E) {
     Src->setName("astype");
     return Src;
   }
+
+  if (SrcTy->isPointerTy() || DstTy->isPointerTy())
+    return Builder.CreatePointerCast(Src, DstTy, "astype");
 
   return createCastsForTypeOfSameSize(Builder, CGF.CGM.getDataLayout(),
                                       Src, DstTy, "astype");

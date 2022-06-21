@@ -272,9 +272,10 @@ const RegisterBankInfo *AArch64Subtarget::getRegBankInfo() const {
 unsigned
 AArch64Subtarget::ClassifyGlobalReference(const GlobalValue *GV,
                                           const TargetMachine &TM) const {
-  // MachO large model always goes via a GOT, simply to get a single 8-byte
+  // MachO/Host-Compute large model always goes via a GOT, simply to get a single 8-byte
   // absolute relocation on all global addresses.
-  if (TM.getCodeModel() == CodeModel::Large && isTargetMachO())
+  if (TM.getCodeModel() == CodeModel::Large &&
+      (isTargetMachO() || isTargetHostCompute()))
     return AArch64II::MO_GOT;
 
   if (!TM.shouldAssumeDSOLocal(*GV->getParent(), GV)) {
@@ -304,9 +305,10 @@ AArch64Subtarget::ClassifyGlobalReference(const GlobalValue *GV,
 
 unsigned AArch64Subtarget::classifyGlobalFunctionReference(
     const GlobalValue *GV, const TargetMachine &TM) const {
-  // MachO large model always goes via a GOT, because we don't have the
+  // MachO/Host-Compute large model always goes via a GOT, because we don't have the
   // relocations available to do anything else..
-  if (TM.getCodeModel() == CodeModel::Large && isTargetMachO() &&
+  if (TM.getCodeModel() == CodeModel::Large &&
+      (isTargetMachO() || isTargetHostCompute()) &&
       !GV->hasInternalLinkage())
     return AArch64II::MO_GOT;
 

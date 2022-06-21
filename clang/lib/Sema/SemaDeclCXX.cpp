@@ -7416,7 +7416,9 @@ bool Sema::CheckExplicitlyDefaultedSpecialMember(CXXMethodDecl *MD,
     ReturnType = Type->getReturnType();
 
     QualType DeclType = Context.getTypeDeclType(RD);
+#if 0 // we don't want this
     DeclType = Context.getAddrSpaceQualType(DeclType, MD->getMethodQualifiers().getAddressSpace());
+#endif
     QualType ExpectedReturnType = Context.getLValueReferenceType(DeclType);
 
     if (!Context.hasSameType(ReturnType, ExpectedReturnType)) {
@@ -13250,10 +13252,12 @@ void Sema::setupImplicitSpecialMemberType(CXXMethodDecl *SpecialMem,
   // Build an exception specification pointing back at this constructor.
   FunctionProtoType::ExtProtoInfo EPI = getImplicitMethodEPI(*this, SpecialMem);
 
+#if 0 // we don't want this
   LangAS AS = getDefaultCXXMethodAddrSpace();
   if (AS != LangAS::Default) {
     EPI.TypeQuals.addAddressSpace(AS);
   }
+#endif
 
   auto QT = Context.getFunctionType(ResultTy, Args, EPI);
   SpecialMem->setType(QT);
@@ -14196,9 +14200,11 @@ CXXMethodDecl *Sema::DeclareImplicitCopyAssignment(CXXRecordDecl *ClassDecl) {
     return nullptr;
 
   QualType ArgType = Context.getTypeDeclType(ClassDecl);
+#if 0 // we don't want this
   LangAS AS = getDefaultCXXMethodAddrSpace();
   if (AS != LangAS::Default)
     ArgType = Context.getAddrSpaceQualType(ArgType, AS);
+#endif
   QualType RetType = Context.getLValueReferenceType(ArgType);
   bool Const = ClassDecl->implicitCopyAssignmentHasConstParam();
   if (Const)
@@ -14535,9 +14541,11 @@ CXXMethodDecl *Sema::DeclareImplicitMoveAssignment(CXXRecordDecl *ClassDecl) {
   // constructor rules.
 
   QualType ArgType = Context.getTypeDeclType(ClassDecl);
+#if 0 // we don't want this
   LangAS AS = getDefaultCXXMethodAddrSpace();
   if (AS != LangAS::Default)
     ArgType = Context.getAddrSpaceQualType(ArgType, AS);
+#endif
   QualType RetType = Context.getLValueReferenceType(ArgType);
   ArgType = Context.getRValueReferenceType(ArgType);
 
@@ -14913,9 +14921,11 @@ CXXConstructorDecl *Sema::DeclareImplicitCopyConstructor(
   if (Const)
     ArgType = ArgType.withConst();
 
+#if 0 // we don't want this
   LangAS AS = getDefaultCXXMethodAddrSpace();
   if (AS != LangAS::Default)
     ArgType = Context.getAddrSpaceQualType(ArgType, AS);
+#endif
 
   ArgType = Context.getLValueReferenceType(ArgType);
 
@@ -15053,9 +15063,11 @@ CXXConstructorDecl *Sema::DeclareImplicitMoveConstructor(
   QualType ClassType = Context.getTypeDeclType(ClassDecl);
 
   QualType ArgType = ClassType;
+#if 0 // we don't want this
   LangAS AS = getDefaultCXXMethodAddrSpace();
   if (AS != LangAS::Default)
     ArgType = Context.getAddrSpaceQualType(ClassType, AS);
+#endif
   ArgType = Context.getRValueReferenceType(ArgType);
 
   bool Constexpr = defaultedSpecialMemberIsConstexpr(*this, ClassDecl,
@@ -15614,7 +15626,7 @@ CheckOperatorNewDeleteTypes(Sema &SemaRef, const FunctionDecl *FnDecl,
   QualType ResultType =
       FnDecl->getType()->castAs<FunctionType>()->getReturnType();
 
-  if (SemaRef.getLangOpts().OpenCLCPlusPlus) {
+  if (SemaRef.getLangOpts().OpenCLCPlusPlus || SemaRef.getLangOpts().CPlusPlus) {
     // The operator is valid on any address space for OpenCL.
     // Drop address space from actual and expected result types.
     if (const auto *PtrTy = ResultType->getAs<PointerType>())
@@ -15649,7 +15661,7 @@ CheckOperatorNewDeleteTypes(Sema &SemaRef, const FunctionDecl *FnDecl,
       << FnDecl->getDeclName();
 
   QualType FirstParamType = FnDecl->getParamDecl(0)->getType();
-  if (SemaRef.getLangOpts().OpenCLCPlusPlus) {
+  if (SemaRef.getLangOpts().OpenCLCPlusPlus || SemaRef.getLangOpts().CPlusPlus) {
     // The operator is valid on any address space for OpenCL.
     // Drop address space from actual and expected first parameter types.
     if (const auto *PtrTy =

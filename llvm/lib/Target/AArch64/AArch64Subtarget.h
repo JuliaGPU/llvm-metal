@@ -525,6 +525,7 @@ public:
   bool isTargetWindows() const { return TargetTriple.isOSWindows(); }
   bool isTargetAndroid() const { return TargetTriple.isAndroid(); }
   bool isTargetFuchsia() const { return TargetTriple.isOSFuchsia(); }
+  bool isTargetHostCompute() const { return TargetTriple.getEnvironment() == Triple::FloorHostCompute; }
 
   bool isTargetCOFF() const { return TargetTriple.isOSBinFormatCOFF(); }
   bool isTargetELF() const { return TargetTriple.isOSBinFormatELF(); }

@@ -218,7 +218,8 @@ class StructType : public Type {
     SCDB_HasBody = 1,
     SCDB_Packed = 2,
     SCDB_IsLiteral = 4,
-    SCDB_IsSized = 8
+    SCDB_IsSized = 8,
+    SCDB_IsGraphicsIOType = 16
   };
 
   /// For a named struct that actually has a name, this is a pointer to the
@@ -279,6 +280,15 @@ public:
   /// Return true if this is a type with an identity that has no body specified
   /// yet. These prints as 'opaque' in .ll files.
   bool isOpaque() const { return (getSubclassData() & SCDB_HasBody) == 0; }
+
+  /// isGraphicsIOType - Return true if this type is used as a graphics shader
+  /// input/output type.
+  bool isGraphicsIOType() const { return (getSubclassData() & SCDB_IsGraphicsIOType) != 0; }
+
+  /// setGraphicsIOType - Flags this type as a graphics input/output type.
+  void setGraphicsIOType() {
+    setSubclassData(getSubclassData() | SCDB_IsGraphicsIOType);
+  }
 
   /// isSized - Return true if this is a sized type.
   bool isSized(SmallPtrSetImpl<Type *> *Visited = nullptr) const;

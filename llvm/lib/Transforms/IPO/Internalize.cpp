@@ -24,6 +24,7 @@
 #include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/Triple.h"
 #include "llvm/Analysis/CallGraph.h"
+#include "llvm/IR/Function.h"
 #include "llvm/IR/Module.h"
 #include "llvm/InitializePasses.h"
 #include "llvm/Pass.h"
@@ -114,6 +115,19 @@ bool InternalizePass::shouldPreserveGV(const GlobalValue &GV) {
   // Check some special cases
   if (AlwaysPreserved.count(GV.getName()))
     return true;
+
+  // is this a compute (OpenCL/CUDA/Metal/Vulkan) kernel or graphics function?
+  if (isa<Function>(GV)) {
+    const Function* F = dyn_cast<Function>(&GV);
+    if (F &&
+        (F->getCallingConv() == CallingConv::FLOOR_KERNEL ||
+         F->getCallingConv() == CallingConv::FLOOR_VERTEX ||
+         F->getCallingConv() == CallingConv::FLOOR_FRAGMENT ||
+         F->getCallingConv() == CallingConv::FLOOR_TESS_CONTROL ||
+         F->getCallingConv() == CallingConv::FLOOR_TESS_EVAL)) {
+      return true;
+    }
+  }
 
   return MustPreserveGV(GV);
 }

@@ -24,6 +24,8 @@
 using namespace clang;
 using namespace CodeGen;
 
+// TODO: fix other This uses?
+
 namespace {
 struct MemberCallInfo {
   RequiredArgs ReqArgs;
@@ -45,7 +47,12 @@ commonEmitCXXMemberOrOperatorCall(CodeGenFunction &CGF, const CXXMethodDecl *MD,
   // Push the this ptr.
   const CXXRecordDecl *RD =
       CGF.CGM.getCXXABI().getThisArgumentTypeForMethod(MD);
-  Args.add(RValue::get(This), CGF.getTypes().DeriveThisType(RD, MD));
+  ASTContext &C = CGF.getContext();
+  QualType this_type = C.VoidPtrTy;
+  if (RD) {
+    this_type = C.getPointerType(C.getAddrSpaceQualType(C.getTypeDeclType(RD), (LangAS)This->getType()->getPointerAddressSpace()));
+  }
+  Args.add(RValue::get(This), this_type);
 
   // If there is an implicit parameter (e.g. VTT), emit it.
   if (ImplicitParam) {
@@ -100,6 +107,7 @@ RValue CodeGenFunction::EmitCXXDestructorCall(
   assert(ThisTy->getAsCXXRecordDecl() == DtorDecl->getParent() &&
          "Pointer/Object mixup");
 
+#if 0 // we don't want this
   LangAS SrcAS = ThisTy.getAddressSpace();
   LangAS DstAS = DtorDecl->getMethodQualifiers().getAddressSpace();
   if (SrcAS != DstAS) {
@@ -108,6 +116,7 @@ RValue CodeGenFunction::EmitCXXDestructorCall(
     This = getTargetHooks().performAddrSpaceCast(*this, This, SrcAS, DstAS,
                                                  NewType);
   }
+#endif
 
   CallArgList Args;
   commonEmitCXXMemberOrOperatorCall(*this, DtorDecl, This, ImplicitParam,

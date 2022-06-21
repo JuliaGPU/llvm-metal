@@ -7,6 +7,7 @@ set(LLVM_LINK_COMPONENTS
   Analysis
   AsmParser
   BitWriter
+  BitWriter50
   CodeGen
   Core
   Coroutines
@@ -15,6 +16,7 @@ set(LLVM_LINK_COMPONENTS
   IRReader
   InstCombine
   Instrumentation
+  LibFloor
   MC
   ObjCARCOpts
   Remarks

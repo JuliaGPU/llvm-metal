@@ -4020,7 +4020,8 @@ public:
 /// whose condition is a known constant, we only visit the reachable successors.
 static bool prepareICWorklistFromFunction(Function &F, const DataLayout &DL,
                                           const TargetLibraryInfo *TLI,
-                                          InstructionWorklist &ICWorklist) {
+                                          InstructionWorklist &ICWorklist,
+                                          bool isVulkan) {
   bool MadeIRChange = false;
   SmallPtrSet<BasicBlock *, 32> Visited;
   SmallVector<BasicBlock*, 256> Worklist;
@@ -4107,6 +4108,10 @@ static bool prepareICWorklistFromFunction(Function &F, const DataLayout &DL,
     if (Visited.count(&BB))
       continue;
 
+    // always keep everything in Vulkan fake continue blocks
+    if (isVulkan && BB.getName().endswith(".fake_continue"))
+      continue;
+
     unsigned NumDeadInstInBB;
     unsigned NumDeadDbgInstInBB;
     std::tie(NumDeadInstInBB, NumDeadDbgInstInBB) =
@@ -4145,7 +4150,7 @@ static bool combineInstructionsOverFunction(
     Function &F, InstructionWorklist &Worklist, AliasAnalysis *AA,
     AssumptionCache &AC, TargetLibraryInfo &TLI, TargetTransformInfo &TTI,
     DominatorTree &DT, OptimizationRemarkEmitter &ORE, BlockFrequencyInfo *BFI,
-    ProfileSummaryInfo *PSI, unsigned MaxIterations, LoopInfo *LI) {
+    ProfileSummaryInfo *PSI, unsigned MaxIterations, bool isVulkan, LoopInfo *LI) {
   auto &DL = F.getParent()->getDataLayout();
   MaxIterations = std::min(MaxIterations, LimitMaxIterations.getValue());
 
@@ -4187,9 +4192,9 @@ static bool combineInstructionsOverFunction(
     LLVM_DEBUG(dbgs() << "\n\nINSTCOMBINE ITERATION #" << Iteration << " on "
                       << F.getName() << "\n");
 
-    MadeIRChange |= prepareICWorklistFromFunction(F, DL, &TLI, Worklist);
+    MadeIRChange |= prepareICWorklistFromFunction(F, DL, &TLI, Worklist, isVulkan);
 
-    InstCombinerImpl IC(Worklist, Builder, F.hasMinSize(), AA, AC, TLI, TTI, DT,
+    InstCombinerImpl IC(Worklist, Builder, F.hasMinSize(), isVulkan, AA, AC, TLI, TTI, DT,
                         ORE, BFI, PSI, DL, LI);
     IC.MaxArraySizeForCombine = MaxArraySize;
 
@@ -4202,10 +4207,10 @@ static bool combineInstructionsOverFunction(
   return MadeIRChange;
 }
 
-InstCombinePass::InstCombinePass() : MaxIterations(LimitMaxIterations) {}
+InstCombinePass::InstCombinePass(bool isVulkan_) : MaxIterations(LimitMaxIterations), isVulkan(isVulkan_) {}
 
-InstCombinePass::InstCombinePass(unsigned MaxIterations)
-    : MaxIterations(MaxIterations) {}
+InstCombinePass::InstCombinePass(unsigned MaxIterations, bool isVulkan_)
+    : MaxIterations(MaxIterations), isVulkan(isVulkan_) {}
 
 PreservedAnalyses InstCombinePass::run(Function &F,
                                        FunctionAnalysisManager &AM) {
@@ -4225,7 +4230,7 @@ PreservedAnalyses InstCombinePass::run(Function &F,
       &AM.getResult<BlockFrequencyAnalysis>(F) : nullptr;
 
   if (!combineInstructionsOverFunction(F, Worklist, AA, AC, TLI, TTI, DT, ORE,
-                                       BFI, PSI, MaxIterations, LI))
+                                       BFI, PSI, MaxIterations, isVulkan, LI))
     // No changes, all analyses are preserved.
     return PreservedAnalyses::all();
 
@@ -4274,18 +4279,18 @@ bool InstructionCombiningPass::runOnFunction(Function &F) {
       nullptr;
 
   return combineInstructionsOverFunction(F, Worklist, AA, AC, TLI, TTI, DT, ORE,
-                                         BFI, PSI, MaxIterations, LI);
+                                         BFI, PSI, MaxIterations, isVulkan, LI);
 }
 
 char InstructionCombiningPass::ID = 0;
 
-InstructionCombiningPass::InstructionCombiningPass()
-    : FunctionPass(ID), MaxIterations(InstCombineDefaultMaxIterations) {
+InstructionCombiningPass::InstructionCombiningPass(bool isVulkan_)
+    : FunctionPass(ID), MaxIterations(InstCombineDefaultMaxIterations), isVulkan(isVulkan_) {
   initializeInstructionCombiningPassPass(*PassRegistry::getPassRegistry());
 }
 
-InstructionCombiningPass::InstructionCombiningPass(unsigned MaxIterations)
-    : FunctionPass(ID), MaxIterations(MaxIterations) {
+InstructionCombiningPass::InstructionCombiningPass(unsigned MaxIterations, bool isVulkan_)
+    : FunctionPass(ID), MaxIterations(MaxIterations), isVulkan(isVulkan_) {
   initializeInstructionCombiningPassPass(*PassRegistry::getPassRegistry());
 }
 
@@ -4312,14 +4317,14 @@ void LLVMInitializeInstCombine(LLVMPassRegistryRef R) {
   initializeInstructionCombiningPassPass(*unwrap(R));
 }
 
-FunctionPass *llvm::createInstructionCombiningPass() {
-  return new InstructionCombiningPass();
+FunctionPass *llvm::createInstructionCombiningPass(bool isVulkan) {
+  return new InstructionCombiningPass(isVulkan);
 }
 
-FunctionPass *llvm::createInstructionCombiningPass(unsigned MaxIterations) {
-  return new InstructionCombiningPass(MaxIterations);
+FunctionPass *llvm::createInstructionCombiningPass(unsigned MaxIterations, bool isVulkan) {
+  return new InstructionCombiningPass(MaxIterations, isVulkan);
 }
 
-void LLVMAddInstructionCombiningPass(LLVMPassManagerRef PM) {
-  unwrap(PM)->add(createInstructionCombiningPass());
+void LLVMAddInstructionCombiningPass(LLVMPassManagerRef PM, bool isVulkan) {
+  unwrap(PM)->add(createInstructionCombiningPass(isVulkan));
 }

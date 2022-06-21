@@ -226,7 +226,7 @@ namespace std { // explicitly not using versioning namespace
 
 class _LIBCPP_EXCEPTION_ABI _LIBCPP_AVAILABILITY_BAD_VARIANT_ACCESS bad_variant_access : public exception {
 public:
-  virtual const char* what() const _NOEXCEPT;
+  virtual constant const char* what() const _NOEXCEPT;
 };
 
 } // namespace std
@@ -255,7 +255,7 @@ void __throw_bad_variant_access() {
 #ifndef _LIBCPP_NO_EXCEPTIONS
         throw bad_variant_access();
 #else
-        _VSTD::abort();
+        __builtin_unreachable();
 #endif
 }
 
@@ -873,7 +873,7 @@ protected:
   template <size_t _Ip, class _Tp, class... _Args>
   inline _LIBCPP_INLINE_VISIBILITY
   static _Tp& __construct_alt(__alt<_Ip, _Tp>& __a, _Args&&... __args) {
-    ::new ((void*)_VSTD::addressof(__a))
+    ::new ((void*)__builtin_addressof(__a))
         __alt<_Ip, _Tp>(in_place, _VSTD::forward<_Args>(__args)...);
     return __a.__value;
   }
@@ -1146,7 +1146,7 @@ public:
           __that);
     } else {
       __impl* __lhs = this;
-      __impl* __rhs = _VSTD::addressof(__that);
+      __impl* __rhs = __builtin_addressof(__that);
       if (__lhs->__move_nothrow() && !__rhs->__move_nothrow()) {
         _VSTD::swap(__lhs, __rhs);
       }
@@ -1557,7 +1557,7 @@ inline _LIBCPP_INLINE_VISIBILITY
 constexpr auto* __generic_get_if(_Vp* __v) noexcept {
   using __variant_detail::__access::__variant;
   return __v && __holds_alternative<_Ip>(*__v)
-             ? _VSTD::addressof(__variant::__get_alt<_Ip>(*__v).__value)
+             ? __builtin_addressof(__variant::__get_alt<_Ip>(*__v).__value)
              : nullptr;
 }
 

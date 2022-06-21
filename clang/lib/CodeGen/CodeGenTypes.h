@@ -77,6 +77,13 @@ class CodeGenTypes {
   /// Maps clang struct type with corresponding record layout info.
   llvm::DenseMap<const Type*, std::unique_ptr<CGRecordLayout>> CGRecordLayouts;
 
+  /// This maps special flattened llvm struct types
+  /// with the corresponding record layout info.
+  llvm::DenseMap<const llvm::Type*, CGRecordLayout *> FlattenedCGRecordLayouts;
+
+  /// This maps CXX record decls to their special flattend llvm struct types
+  llvm::DenseMap<const CXXRecordDecl*, llvm::Type*> FlattenedRecords;
+
   /// Contains the LLVM IR type for any converted RecordDecl.
   llvm::DenseMap<const Type*, llvm::StructType *> RecordDeclTypes;
 
@@ -128,13 +135,18 @@ public:
   CanQualType DeriveThisType(const CXXRecordDecl *RD, const CXXMethodDecl *MD);
 
   /// ConvertType - Convert type T into a llvm::Type.
-  llvm::Type *ConvertType(QualType T);
+  /// "convert_array_image_type" signals if we want to directly convert struct
+  /// types containing image arrays to native LLVM arrays (default).
+  llvm::Type *ConvertType(QualType T, bool convert_array_image_type = true);
 
   /// ConvertTypeForMem - Convert type T into a llvm::Type.  This differs from
   /// ConvertType in that it is used to convert to the memory representation for
   /// a type.  For example, the scalar representation for _Bool is i1, but the
   /// memory representation is usually i8 or i32, depending on the target.
-  llvm::Type *ConvertTypeForMem(QualType T, bool ForBitField = false);
+  /// "ForRecordField" signals if this should be converted for a field type
+  /// within a record/struct.
+  llvm::Type *ConvertTypeForMem(QualType T, bool ForBitField = false,
+                                bool ForRecordField = false);
 
   /// GetFunctionType - Get the LLVM function type for \arg Info.
   llvm::FunctionType *GetFunctionType(const CGFunctionInfo &Info);
@@ -157,7 +169,12 @@ public:
   /// and/or incomplete argument types, this will return the opaque type.
   llvm::Type *GetFunctionTypeForVTable(GlobalDecl GD);
 
-  const CGRecordLayout &getCGRecordLayout(const RecordDecl*);
+  const CGRecordLayout &getCGRecordLayout(const RecordDecl*,
+										  llvm::Type* struct_type = nullptr);
+
+  /// Returns the flattend LLVM type of the specified CXX record decl,
+  /// or nullptr if no flattened type exists.
+  llvm::Type *getFlattenedRecordType(const CXXRecordDecl* D) const;
 
   /// UpdateCompletedType - When we find the full definition for a TagDecl,
   /// replace the 'opaque' type we previously made for it if applicable.
@@ -280,15 +297,47 @@ public:
   void addRecordTypeName(const RecordDecl *RD, llvm::StructType *Ty,
                          StringRef suffix);
 
+  // will recurse through the specified class/struct decl, its base classes,
+  // all its contained class/struct/union decls, all its contained arrays,
+  // returning a vector of all contained/scalarized fields + info
+  // NOTE: for unions, only the first field will be considered
+  // NOTE: this also transform/converts [[vector_compat]] types to clang vector types
+  std::vector<ASTContext::aggregate_scalar_entry>
+  get_aggregate_scalar_fields(const CXXRecordDecl* root_decl,
+                              const CXXRecordDecl* decl,
+                              const bool ignore_root_vec_compat = false,
+                              const bool ignore_bases = false,
+                              const bool expand_array_image = true) const;
+
+  //
+  void create_flattened_cg_layout(const CXXRecordDecl* decl, llvm::StructType* type,
+								  const std::vector<ASTContext::aggregate_scalar_entry>& fields);
+
+  // for all entry functions/points: handle the function type -> add implicit internal args
+  // "FTy" is optional and if specified will update the function type
+  // "Args" is optional and if specified, will add all additional args to this the specified list
+  void handleMetalVulkanEntryFunction(CanQualType* FTy, FunctionArgList* ArgList, const FunctionDecl* FD);
+
+  // returns the amount of implicit internal args that are added for the specified FunctionDecl
+  uint32_t getMetalVulkanImplicitArgCount(const FunctionDecl* FD) const;
+
+  // returns true if the specified LLVM type is a flattened type
+  bool is_flattened_struct_type(llvm::Type* Ty) const {
+    return FlattenedCGRecordLayouts.count(Ty) > 0;
+  }
+
 
 public:  // These are internal details of CGT that shouldn't be used externally.
   /// ConvertRecordDeclType - Lay out a tagged decl type like struct or union.
   llvm::StructType *ConvertRecordDeclType(const RecordDecl *TD);
 
+  llvm::Type *ConvertArrayImageType(const Type* Ty);
+
   /// getExpandedTypes - Expand the type \arg Ty into the LLVM
   /// argument types it would be passed as. See ABIArgInfo::Expand.
   void getExpandedTypes(QualType Ty,
-                        SmallVectorImpl<llvm::Type *>::iterator &TI);
+                        SmallVectorImpl<llvm::Type *>::iterator &TI,
+                        const CallingConv CC);
 
   /// IsZeroInitializable - Return whether a type can be
   /// zero-initialized (in the C++ sense) with an LLVM zeroinitializer.

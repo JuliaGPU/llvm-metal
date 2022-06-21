@@ -47,7 +47,7 @@
 
 #ifndef OPENCL_GENERIC_EXTENSION
 #ifndef OPENCLEXTNAME
-#pragma error "macro OPENCLEXTNAME or OPENCL_GENERIC_EXTENSION is required"
+#error "macro OPENCLEXTNAME or OPENCL_GENERIC_EXTENSION is required"
 #else
 #define OPENCL_GENERIC_EXTENSION(ext, ...) OPENCLEXTNAME(ext)
 #endif // OPENCLEXTNAME
@@ -117,6 +117,13 @@ OPENCL_OPTIONALCOREFEATURE(__opencl_c_read_write_images, false, 300, OCL_C_30)
 OPENCL_OPTIONALCOREFEATURE(__opencl_c_program_scope_global_variables, false, 300, OCL_C_30)
 OPENCL_OPTIONALCOREFEATURE(__opencl_c_fp64, false, 300, OCL_C_30)
 OPENCL_OPTIONALCOREFEATURE(__opencl_c_images, false, 300, OCL_C_30)
+
+// Vulkan capabilities and extensions
+OPENCL_EXTENSION(vk_capability_int16, true, 120)
+OPENCL_EXTENSION(vk_capability_int64, true, 120)
+OPENCL_EXTENSION(vk_capability_float16, true, 120)
+OPENCL_EXTENSION(vk_capability_float64, true, 120)
+OPENCL_EXTENSION(vk_capability_multiview, true, 120)
 
 #undef OPENCL_OPTIONALCOREFEATURE
 #undef OPENCL_COREFEATURE

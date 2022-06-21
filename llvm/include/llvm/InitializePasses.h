@@ -27,6 +27,9 @@ void initializeTransformUtils(PassRegistry&);
 /// Initialize all passes linked into the ScalarOpts library.
 void initializeScalarOpts(PassRegistry&);
 
+/// Initialize all passes linked into the LibFloor library.
+void initializeLibFloor(PassRegistry&);
+
 /// Initialize all passes linked into the ObjCARCOpts library.
 void initializeObjCARCOpts(PassRegistry&);
 
@@ -455,8 +458,29 @@ void initializeWasmEHPreparePass(PassRegistry&);
 void initializeWholeProgramDevirtPass(PassRegistry&);
 void initializeWinEHPreparePass(PassRegistry&);
 void initializeWriteBitcodePassPass(PassRegistry&);
+void initializeWriteBitcodePass50Pass(PassRegistry&);
 void initializeWriteThinLTOBitcodePass(PassRegistry&);
 void initializeXRayInstrumentationPass(PassRegistry&);
+
+// LibFloor passes
+void initializeAddressSpaceFixPass(PassRegistry&);
+void initializeEverythingInlinerPass(PassRegistry&);
+void initializeCUDAImagePass(PassRegistry&);
+void initializeCUDAFinalPass(PassRegistry&);
+void initializeMetalFirstPass(PassRegistry&);
+void initializeMetalFinalPass(PassRegistry&);
+void initializeMetalFinalModuleCleanupPass(PassRegistry&);
+void initializeMetalImagePass(PassRegistry&);
+void initializeSPIRFinalPass(PassRegistry&);
+void initializeSPIRImagePass(PassRegistry&);
+void initializeCFGStructurizationPass(PassRegistry&);
+void initializeVulkanImagePass(PassRegistry&);
+void initializeVulkanFinalPass(PassRegistry&);
+void initializeVulkanBuiltinParamHandlingPass(PassRegistry&);
+void initializeVulkanPreFinalPass(PassRegistry&);
+void initializeVulkanFinalModuleCleanupPass(PassRegistry&);
+void initializePropagateRangeInfoPass(PassRegistry&);
+void initializeFMACombinerPass(PassRegistry&);
 
 } // end namespace llvm
 

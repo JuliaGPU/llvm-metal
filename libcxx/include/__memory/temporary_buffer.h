@@ -53,7 +53,7 @@ get_temporary_buffer(ptrdiff_t __n) _NOEXCEPT
             return __r;
         }
 
-        __r.first = static_cast<_Tp*>(::operator new(__n * sizeof(_Tp), nothrow));
+        __r.first = static_cast<_Tp*>(__builtin_operator_new(__n * sizeof(_Tp)));
 #endif
 
         if (__r.first)

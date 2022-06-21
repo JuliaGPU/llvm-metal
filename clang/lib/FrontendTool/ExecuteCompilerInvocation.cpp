@@ -52,6 +52,11 @@ CreateFrontendBaseAction(CompilerInstance &CI) {
   case DumpTokens:             return std::make_unique<DumpTokensAction>();
   case EmitAssembly:           return std::make_unique<EmitAssemblyAction>();
   case EmitBC:                 return std::make_unique<EmitBCAction>();
+  case EmitBC32:               return std::make_unique<EmitBC32Action>();
+  case EmitBC50:               return std::make_unique<EmitBC50Action>();
+  case EmitSPIRV:              return std::make_unique<EmitSPIRVAction>();
+  case EmitSPIRVContainer:     return std::make_unique<EmitSPIRVContainerAction>();
+  case EmitMetalLib:           return std::make_unique<EmitMetalLibAction>();
   case EmitHTML:               return std::make_unique<HTMLPrintAction>();
   case EmitLLVM:               return std::make_unique<EmitLLVMAction>();
   case EmitLLVMOnly:           return std::make_unique<EmitLLVMOnlyAction>();
