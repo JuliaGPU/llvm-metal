@@ -941,7 +941,7 @@ void ModuleBitcodeWriter70::writeTypeTable() {
       llvm_unreachable("bfloat16 type is not supported with LLVM 7.0");
     case Type::X86_AMXTyID:
       llvm_unreachable("AMX types are not supported with LLVM 7.0");
-    case Type::DXILPointerTyID:
+    case Type::TypedPointerTyID:
       llvm_unreachable("DXIL pointers cannot be added to IR modules");
     }
 
