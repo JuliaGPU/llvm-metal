@@ -261,7 +261,7 @@ struct MetalLibDisDiagnosticHandler : public DiagnosticHandler {
 };
 } // end anon namespace
 
-static Expected<bool> openInputFile(LLVMContext &Context, std::unique_ptr<ToolOutputFile>& Out) {
+static Expected<bool> openInputFile(char** argv, std::unique_ptr<ToolOutputFile>& Out) {
 	auto& os = Out->os();
 	
 	//
@@ -437,7 +437,9 @@ static Expected<bool> openInputFile(LLVMContext &Context, std::unique_ptr<ToolOu
 		os << "\tsize: " << bc_mem->getBufferSize() << ", " << prog.bitcode_size << '\n';
 		os << '\n';
 		memcpy((char*)bc_mem->getBufferStart(), data + bc_offset, bc_mem->getBufferSize());
-		
+
+		LLVMContext Context;
+		Context.setDiagnosticHandler(std::make_unique<MetalLibDisDiagnosticHandler>(argv[0]));
 		auto bc_mod = parseBitcodeFile(*bc_mem, Context);
 		if(bc_mod) {
 			std::unique_ptr<AssemblyAnnotationWriter> Annotator;
@@ -502,7 +504,7 @@ int main(int argc, char **argv) {
     return -1;
   }
 
-  Expected<bool> SuccessOrErr = openInputFile(Context, Out);
+  Expected<bool> SuccessOrErr = openInputFile(argv, Out);
   if (!SuccessOrErr) {
     handleAllErrors(SuccessOrErr.takeError(), [&](ErrorInfoBase &EIB) {
       errs() << argv[0] << ": ";
