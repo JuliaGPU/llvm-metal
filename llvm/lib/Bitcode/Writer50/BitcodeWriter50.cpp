@@ -146,6 +146,22 @@ public:
         VE(*M, ShouldPreserveUseListOrder), Index(Index),
         GenerateHash(GenerateHash), ModHash(ModHash),
         BitcodeStartBit(Stream.GetCurrentBitNo()) {
+    // imitate Metal by having one llvm.dbg.cu entry per DISubprogram
+    if (auto dbg_cu = M->getNamedMetadata("llvm.dbg.cu"); dbg_cu) {
+      uint32_t subprogram_count = 0;
+      for (const auto &md : VE.getMetadataMap()) {
+        if (const DISubprogram *disubprog_node = dyn_cast_or_null<DISubprogram>(md.first); disubprog_node) {
+          ++subprogram_count;
+        }
+      }
+      if (subprogram_count > 1 && dbg_cu->getNumOperands() == 1) {
+        auto dup_op = dbg_cu->getOperand(0);
+        for (uint32_t i = 1; i < subprogram_count; ++i) {
+          dbg_cu->addOperand(dup_op);
+        }
+      }
+    }
+
     // Assign ValueIds to any callee values in the index that came from
     // indirect call profiles and were recorded as a GUID not a Value*
     // (which would have been assigned an ID by the ValueEnumerator50).
@@ -1385,8 +1401,11 @@ void ModuleBitcodeWriter50::writeDISubrange(const DISubrange *N,
                                             SmallVectorImpl<uint64_t> &Record,
                                             unsigned Abbrev) {
   Record.push_back(N->isDistinct());
-  const auto CI = N->getCount().get<ConstantInt *>();
-  const auto LBMD = dyn_cast<ConstantAsMetadata>(N->getRawLowerBound());
+  ConstantInt *CI = nullptr;
+  if (auto cnt = N->getCount(); cnt) {
+    CI = cnt.get<ConstantInt *>();
+  }
+  const auto LBMD = dyn_cast_or_null<ConstantAsMetadata>(N->getRawLowerBound());
   if (CI && LBMD) {
     Record.push_back(CI->getSExtValue());
     const auto LB = cast<ConstantInt>(LBMD->getValue());
@@ -1559,7 +1578,6 @@ void ModuleBitcodeWriter50::writeDISubprogram(const DISubprogram *N,
   Record.push_back(VE.getMetadataOrNullID(N->getRawUnit()));
   Record.push_back(VE.getMetadataOrNullID(N->getTemplateParams().get()));
   Record.push_back(VE.getMetadataOrNullID(N->getDeclaration()));
-  // TODO: ? old: Record.push_back(VE.getMetadataOrNullID(N->getVariables().get()));
   Record.push_back(VE.getMetadataOrNullID(N->getRetainedNodes().get()));
   Record.push_back(N->getThisAdjustment());
   Record.push_back(VE.getMetadataOrNullID(N->getThrownTypes().get()));

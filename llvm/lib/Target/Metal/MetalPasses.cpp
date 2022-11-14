@@ -610,6 +610,14 @@ namespace {
 					}
 					module_modified = true;
 				}
+
+				if (func.isDeclaration()) {
+					if (DISubprogram* sub_prog_dbg = func.getSubprogram(); sub_prog_dbg) {
+						func.setSubprogram(nullptr);
+						module_modified = true;
+					}
+				}
+
 				++func_iter;
 			}
 			return module_modified;

@@ -5,6 +5,15 @@ add_llvm_target(MetalCodeGen
   MetalTargetMachine.cpp
   MetalPasses.cpp
 
+  bzip2/blocksort.c
+  bzip2/bzlib.c
+  bzip2/compress.c
+  bzip2/crctable.c
+  bzip2/decompress.c
+  bzip2/huffman.c
+  bzip2/randtable.c
+  tar/microtar.c
+
   LINK_COMPONENTS
   Core
   CodeGen
