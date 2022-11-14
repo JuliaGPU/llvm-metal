@@ -930,8 +930,14 @@ void ValueEnumerator50::EnumerateAttributes(AttributeList PAL, LLVMContext& Cont
       } else if (Attr.isStringAttribute()) {
         has_any_valid_attr = true;
         break;
+      } else if (Attr.isTypeAttribute()) {
+        if (Attr.getKindAsEnum() == Attribute::ByVal) {
+          has_any_valid_attr = true;
+          break;
+        }
+        // else: ignore all other type attributes
       }
-      // else: ignore type attributes
+      // else: ignore
     }
     auto AS_index = i;
     if (!has_any_valid_attr) {

@@ -665,7 +665,13 @@ void ModuleBitcodeWriter50::writeAttributeGroupTable() {
         }
       } else {
         assert(Attr.isTypeAttribute());
-        // ignore this
+        // NOTE: we do want to encode the "byval" attribute (in the 5.0 format -> no type)
+        if (Attr.getKindAsEnum() == Attribute::ByVal) {
+          const auto enc_attr = getAttrKindEncodingBC50(Attr.getKindAsEnum());
+          Record.push_back(0);
+          Record.push_back(enc_attr);
+        }
+        // else: ignore this
       }
     }
 
