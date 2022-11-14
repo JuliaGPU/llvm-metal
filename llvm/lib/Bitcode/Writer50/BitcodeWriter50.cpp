@@ -629,7 +629,7 @@ void ModuleBitcodeWriter50::writeAttributeGroupTable() {
 
   SmallVector<uint64_t, 64> Record;
   for (ValueEnumerator50::IndexAndAttrSet Pair : AttrGrps) {
-    if (Pair.first == ~0u) {
+    if (Pair.first == ValueEnumerator50::invalid_attribute_group_id) {
       // this complete set/group can't be encoded for 5.0
       continue;
     }
