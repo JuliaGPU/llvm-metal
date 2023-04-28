@@ -713,7 +713,8 @@ void ModuleBitcodeWriter50::writeAttributeTable() {
     for (unsigned i : AL.indexes()) {
       AttributeSet AS = AL.getAttributes(i);
       if (AS.hasAttributes())
-        if (const auto group_id = VE.getAttributeGroupID({i, AS}); group_id != ~0u)
+        if (const auto group_id = VE.getAttributeGroupID({i, AS});
+            group_id != ValueEnumerator50::invalid_attribute_group_id)
           Record.push_back(group_id);
     }
 
