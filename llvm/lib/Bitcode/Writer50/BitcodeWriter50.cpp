@@ -1756,7 +1756,7 @@ void ModuleBitcodeWriter50::writeDIGlobalVariableExpression(
   Record.push_back(N->isDistinct());
   Record.push_back(VE.getMetadataOrNullID(N->getVariable()));
   Record.push_back(VE.getMetadataOrNullID(N->getExpression()));
-  
+
   Stream.EmitRecord(bitc::METADATA_GLOBAL_VAR_EXPR, Record, Abbrev);
   Record.clear();
 }
