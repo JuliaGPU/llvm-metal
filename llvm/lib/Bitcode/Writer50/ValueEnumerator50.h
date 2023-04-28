@@ -213,6 +213,13 @@ public:
     return makeArrayRef(MDs).slice(NumModuleMDs).slice(NumMDStrings);
   }
 
+  ArrayRef<const Metadata *> getMDs() const {
+    return makeArrayRef(MDs);
+  }
+  const MetadataMapType& getMetadataMap() const {
+    return MetadataMap;
+  }
+
   const TypeList &getTypes() const { return Types; }
   const std::vector<const BasicBlock*> &getBasicBlocks() const {
     return BasicBlocks;

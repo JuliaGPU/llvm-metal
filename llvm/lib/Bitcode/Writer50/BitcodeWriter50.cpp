@@ -146,6 +146,22 @@ public:
         VE(*M, ShouldPreserveUseListOrder), Index(Index),
         GenerateHash(GenerateHash), ModHash(ModHash),
         BitcodeStartBit(Stream.GetCurrentBitNo()) {
+    // imitate Metal by having one llvm.dbg.cu entry per DISubprogram
+    if (auto dbg_cu = M->getNamedMetadata("llvm.dbg.cu"); dbg_cu) {
+      uint32_t subprogram_count = 0;
+      for (const auto &md : VE.getMetadataMap()) {
+        if (const DISubprogram *disubprog_node = dyn_cast_or_null<DISubprogram>(md.first); disubprog_node) {
+          ++subprogram_count;
+        }
+      }
+      if (subprogram_count > 1 && dbg_cu->getNumOperands() == 1) {
+        auto dup_op = dbg_cu->getOperand(0);
+        for (uint32_t i = 1; i < subprogram_count; ++i) {
+          dbg_cu->addOperand(dup_op);
+        }
+      }
+    }
+
     // Assign ValueIds to any callee values in the index that came from
     // indirect call profiles and were recorded as a GUID not a Value*
     // (which would have been assigned an ID by the ValueEnumerator50).
