@@ -139,6 +139,7 @@ struct metallib_program_info {
 		LAYR        = make_tag_type('L', 'A', 'Y', 'R'),
 		TESS        = make_tag_type('T', 'E', 'S', 'S'),
 		SOFF        = make_tag_type('S', 'O', 'F', 'F'),
+		RFLT        = make_tag_type('R', 'F', 'L', 'T'),
 		// generic end tag
 		END         = make_tag_type('E', 'N', 'D', 'T'),
 	};
@@ -377,8 +378,16 @@ static Expected<bool> openInputFile(LLVMContext &Context, std::unique_ptr<ToolOu
 					found_end_tag = true;
 					break;
 				}
+				case metallib_program_info::TAG_TYPE::RFLT: {
+					// unknown 8 bytes of data
+					if(tag_length != 8) {
+						return make_error<StringError>("invalid RFLT size: " + to_string(tag_length),
+													   inconvertibleErrorCode());
+					}
+					break;
+				}
 				default:
-					return make_error<StringError>("invalid tag: " + to_string((uint32_t)tag),
+					return make_error<StringError>("invalid tag with length " + to_string(tag_length) + ": " + to_string((uint32_t)tag),
 												   inconvertibleErrorCode());
 			}
 			program_ptr += tag_length;
