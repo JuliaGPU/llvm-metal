@@ -77,7 +77,7 @@ struct __attribute__((packed)) metallib_version {
 	uint32_t container_version_major : 8;
 	uint32_t container_version_rev : 4; // lo
 	uint32_t container_version_minor : 4; // hi
-	
+
 	// unknown: always 2, 0, 0
 	// TODO: might be dwarf version?
 	uint32_t unknown_version_major : 8;
@@ -86,7 +86,7 @@ struct __attribute__((packed)) metallib_version {
 
 	// unknown: always 2 (macOS), 3 (iOS), 5 (macOS since 10.16/11.0)
 	uint32_t unkown_version;
-	
+
 	// unknown: always 0
 	uint32_t zero;
 };
@@ -115,7 +115,7 @@ static_assert(sizeof(metallib_header) == 4 + sizeof(metallib_version) + sizeof(u
 
 struct metallib_program_info {
 	uint32_t length; // including length itself
-	
+
 	// NOTE: tag types are always 32-bit
 	// NOTE: tag types are always followed by a uint16_t that specifies the length of the tag data
 #define make_tag_type(a, b, c, d) ((uint32_t(d) << 24u) | (uint32_t(c) << 16u) | (uint32_t(b) << 8u) | uint32_t(a))
@@ -144,7 +144,7 @@ struct metallib_program_info {
 		END         = make_tag_type('E', 'N', 'D', 'T'),
 	};
 #undef make_tag_type
-	
+
 	enum class PROGRAM_TYPE : uint8_t {
 		VERTEX = 0,
 		FRAGMENT = 1,
@@ -152,20 +152,20 @@ struct metallib_program_info {
 		// TODO: tessellation?
 		NONE = 255
 	};
-	
+
 	struct version_info {
 		uint32_t major : 16;
 		uint32_t minor : 8;
 		uint32_t rev : 8;
 	};
-	
+
 	struct offset_info {
 		// NOTE: these are all relative offsets -> add to metallib_header_control offsets to get absolute offsets
 		uint64_t reflection_offset;
 		uint64_t debug_offset;
 		uint64_t bitcode_offset;
 	};
-	
+
 	struct entry {
 		uint32_t length;
 		string name; // NOTE: limited to 65536 - 1 ('\0')
@@ -264,7 +264,7 @@ struct MetalLibDisDiagnosticHandler : public DiagnosticHandler {
 
 static Expected<bool> openInputFile(LLVMContext &Context, std::unique_ptr<ToolOutputFile>& Out) {
 	auto& os = Out->os();
-	
+
 	//
 	ErrorOr<std::unique_ptr<MemoryBuffer>> input_data = MemoryBuffer::getFileOrSTDIN(InputFilename);
 	if (!input_data) {
@@ -272,18 +272,18 @@ static Expected<bool> openInputFile(LLVMContext &Context, std::unique_ptr<ToolOu
 	}
 	const auto& buffer = (*input_data)->getBuffer();
 	const auto& data = buffer.data();
-	
+
 	// sanity check
 	if(buffer.size() < sizeof(metallib_header)) {
 		return make_error<StringError>("invalid header size", inconvertibleErrorCode());
 	}
-	
+
 	//
 	const auto& header = *(const metallib_header*)data;
 	if(memcmp(metallib_magic, header.magic, 4) != 0) {
 		return make_error<StringError>("invalid magic", inconvertibleErrorCode());
 	}
-	
+
 	// dump
 	os << "[header]" << '\n';
 	os << "container version: " << header.version.container_version_major << "." << header.version.container_version_minor << "." << header.version.container_version_rev << '\n';
@@ -291,7 +291,7 @@ static Expected<bool> openInputFile(LLVMContext &Context, std::unique_ptr<ToolOu
 	os << "unknown: " << header.version.unkown_version << '\n';
 	os << "zero?: " << header.version.zero << '\n';
 	os << "length: " << header.file_length << '\n';
-	
+
 	os << '\n';
 	os << "programs_offset: " << header.header_control.programs_offset << '\n';
 	os << "programs_length: " << header.header_control.programs_length << '\n';
@@ -302,21 +302,21 @@ static Expected<bool> openInputFile(LLVMContext &Context, std::unique_ptr<ToolOu
 	os << "bitcode_offset: " << header.header_control.bitcode_offset << '\n';
 	os << "bitcode_length: " << header.header_control.bitcode_length << '\n';
 	os << "program_count: " << header.header_control.program_count << '\n';
-	
+
 	// read programs info
 	if(buffer.size() < header.header_control.programs_offset + header.header_control.programs_length + 4u) {
 		return make_error<StringError>("invalid size", inconvertibleErrorCode());
 	}
-	
+
 	metallib_program_info info;
 	auto program_ptr = &data[header.header_control.programs_offset + 4];
-	
+
 	info.entries.resize(header.header_control.program_count);
 	for(uint32_t i = 0; i < header.header_control.program_count; ++i) {
 		auto& entry = info.entries[i];
-		
+
 		entry.length = *(const uint32_t*)program_ptr; program_ptr += 4;
-		
+
 		bool found_end_tag = false;
 		while(!found_end_tag) {
 			const auto tag = *(const metallib_program_info::TAG_TYPE*)program_ptr; program_ptr += 4;
@@ -324,13 +324,13 @@ static Expected<bool> openInputFile(LLVMContext &Context, std::unique_ptr<ToolOu
 			if(tag != metallib_program_info::TAG_TYPE::END) {
 				tag_length = *(const uint16_t*)program_ptr;
 				program_ptr += 2;
-				
+
 				if(tag_length == 0) {
 					return make_error<StringError>("tag " + to_string(uint32_t(tag)) + " should not be empty",
 												   inconvertibleErrorCode());
 				}
 			}
-			
+
 			switch(tag) {
 				case metallib_program_info::TAG_TYPE::NAME: {
 					entry.name = string((const char*)program_ptr, tag_length - 1u);
@@ -396,7 +396,7 @@ static Expected<bool> openInputFile(LLVMContext &Context, std::unique_ptr<ToolOu
 	if(info.entries.size() != header.header_control.program_count) {
 		return make_error<StringError>("invalid entry count", inconvertibleErrorCode());
 	}
-	
+
 	//
 	for(const auto& prog : info.entries) {
 		os << '\n';
@@ -425,7 +425,7 @@ static Expected<bool> openInputFile(LLVMContext &Context, std::unique_ptr<ToolOu
 		os << "\trel offsets (refl, dbg, bc): " << prog.offset.reflection_offset << ", " << prog.offset.debug_offset << ", " << prog.offset.bitcode_offset << '\n';
 		os << "\tbitcode size: " << prog.bitcode_size << '\n';
 		os << "\thash: ";
-		
+
 		stringstream hash_hex;
 		hash_hex << hex << uppercase;
 		for(uint32_t i = 0; i < 32; ++i) {
@@ -437,7 +437,7 @@ static Expected<bool> openInputFile(LLVMContext &Context, std::unique_ptr<ToolOu
 		os << hash_hex.str() << '\n';
 		os << "\ttess info: " << uint32_t(prog.tess_info) << '\n';
 		os << "\tsoffset: " << uint32_t(prog.soffset) << '\n';
-		
+
 		// output LLVM IR
 		// TODO: could use stringref?
 		auto bc_mem = WritableMemoryBuffer::getNewUninitMemBuffer(prog.bitcode_size, "bc_module");
@@ -446,19 +446,19 @@ static Expected<bool> openInputFile(LLVMContext &Context, std::unique_ptr<ToolOu
 		os << "\tsize: " << bc_mem->getBufferSize() << ", " << prog.bitcode_size << '\n';
 		os << '\n';
 		memcpy((char*)bc_mem->getBufferStart(), data + bc_offset, bc_mem->getBufferSize());
-		
+
 		auto bc_mod = parseBitcodeFile(*bc_mem, Context);
 		if(bc_mod) {
 			std::unique_ptr<AssemblyAnnotationWriter> Annotator;
 			if (ShowAnnotations) {
 				Annotator.reset(new CommentWriter());
 			}
-			
+
 			if ((*bc_mod)->materializeAll()) {
 				return make_error<StringError>("failed to materialize", inconvertibleErrorCode());
 			}
 			(*bc_mod)->print(Out->os(), Annotator.get(), PreserveAssemblyUseListOrder);
-			
+
 			if(Out->os().has_error()) {
 				Out->os().clear_error();
 			}
@@ -473,7 +473,7 @@ static Expected<bool> openInputFile(LLVMContext &Context, std::unique_ptr<ToolOu
 			return make_error<StringError>("failed to parse bitcode module", inconvertibleErrorCode());
 		}
 	}
-	
+
 	return true;
 }
 
