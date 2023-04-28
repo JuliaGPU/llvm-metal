@@ -935,7 +935,7 @@ void ValueEnumerator50::EnumerateAttributes(AttributeList PAL, LLVMContext& Cont
     }
     auto AS_index = i;
     if (!has_any_valid_attr) {
-      AS_index = ~0u;
+      AS_index = ValueEnumerator50::invalid_attribute_group_id;
     }
 
     IndexAndAttrSet Pair = {AS_index, AS};

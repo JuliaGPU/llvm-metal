@@ -629,7 +629,7 @@ void ModuleBitcodeWriter50::writeAttributeGroupTable() {
 
   SmallVector<uint64_t, 64> Record;
   for (ValueEnumerator50::IndexAndAttrSet Pair : AttrGrps) {
-    if (Pair.first == ~0u) {
+    if (Pair.first == ValueEnumerator50::invalid_attribute_group_id) {
       // this complete set/group can't be encoded for 5.0
       continue;
     }
@@ -688,7 +688,8 @@ void ModuleBitcodeWriter50::writeAttributeTable() {
     for (unsigned i = AL.index_begin(), e = AL.index_end(); i != e; ++i) {
       AttributeSet AS = AL.getAttributes(i);
       if (AS.hasAttributes())
-        if (const auto group_id = VE.getAttributeGroupID({i, AS}); group_id != ~0u)
+        if (const auto group_id = VE.getAttributeGroupID({i, AS});
+            group_id != ValueEnumerator50::invalid_attribute_group_id)
           Record.push_back(group_id);
     }
 

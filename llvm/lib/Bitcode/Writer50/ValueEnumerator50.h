@@ -45,6 +45,9 @@ class ValueEnumerator50 {
 public:
   typedef std::vector<Type*> TypeList;
 
+  //! signals that an attribute group id is invalid / should not be used
+  static constexpr const uint32_t invalid_attribute_group_id = 0x7FFF'FFFFu;
+
   // For each value, we remember its Value* and occurrence frequency.
   typedef std::vector<std::pair<const Value*, unsigned> > ValueList;
 
@@ -183,7 +186,7 @@ public:
     AttributeGroupMapType::const_iterator I = AttributeGroupMap.find(Group);
     //assert(I != AttributeGroupMap.end() && "Attribute not in ValueEnumerator50!");
     if (I == AttributeGroupMap.end()) {
-      return ~0u;
+      return invalid_attribute_group_id;
     }
     return I->second;
   }
