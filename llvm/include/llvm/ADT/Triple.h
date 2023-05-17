@@ -97,6 +97,7 @@ public:
     spir64,         // SPIR: standard portable IR for OpenCL 64-bit version
     spirv32,        // SPIR-V with 32-bit pointers
     spirv64,        // SPIR-V with 64-bit pointers
+    air64,          // AIR: Apple IR, used for Metal, always 64-bit
     kalimba,        // Kalimba: generic kalimba
     shave,          // SHAVE: Movidius vector VLIW processors
     lanai,          // Lanai: Lanai 32-bit
@@ -246,7 +247,7 @@ public:
     CoreCLR,
     Simulator, // Simulator variants of other systems, e.g., Apple's iOS
     MacABI, // Mac Catalyst variant of Apple's iOS deployment target.
-    
+
     // Shader Stages
     Pixel,
     Vertex,

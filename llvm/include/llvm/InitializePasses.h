@@ -438,6 +438,7 @@ void initializeWarnMissedTransformationsLegacyPass(PassRegistry &);
 void initializeWasmEHPreparePass(PassRegistry&);
 void initializeWinEHPreparePass(PassRegistry&);
 void initializeWriteBitcodePassPass(PassRegistry&);
+void initializeWriteBitcodePass50Pass(PassRegistry&);
 void initializeWriteThinLTOBitcodePass(PassRegistry&);
 void initializeXRayInstrumentationPass(PassRegistry&);
 

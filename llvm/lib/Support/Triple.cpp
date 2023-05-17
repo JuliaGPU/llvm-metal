@@ -72,6 +72,7 @@ StringRef Triple::getArchTypeName(ArchType Kind) {
   case spir:           return "spir";
   case spirv32:        return "spirv32";
   case spirv64:        return "spirv64";
+  case air64:          return "air64";
   case systemz:        return "s390x";
   case tce:            return "tce";
   case tcele:          return "tcele";
@@ -156,6 +157,8 @@ StringRef Triple::getArchTypePrefix(ArchType Kind) {
   case spirv32:
   case spirv64:     return "spirv";
 
+  case air64:       return "air64";
+
   case kalimba:     return "kalimba";
   case lanai:       return "lanai";
   case shave:       return "shave";
@@ -170,7 +173,7 @@ StringRef Triple::getArchTypePrefix(ArchType Kind) {
 
   case loongarch32:
   case loongarch64: return "loongarch";
-  
+
   case dxil:        return "dx";
   }
 }
@@ -359,6 +362,7 @@ Triple::ArchType Triple::getArchTypeForLLVMName(StringRef Name) {
     .Case("spir64", spir64)
     .Case("spirv32", spirv32)
     .Case("spirv64", spirv64)
+    .Case("air64", air64)
     .Case("kalimba", kalimba)
     .Case("lanai", lanai)
     .Case("shave", shave)
@@ -499,6 +503,7 @@ static Triple::ArchType parseArch(StringRef ArchName) {
            "spirv32v1.3", "spirv32v1.4", "spirv32v1.5", Triple::spirv32)
     .Cases("spirv64", "spirv64v1.0", "spirv64v1.1", "spirv64v1.2",
            "spirv64v1.3", "spirv64v1.4", "spirv64v1.5", Triple::spirv64)
+    .Case("air64", Triple::air64)
     .StartsWith("kalimba", Triple::kalimba)
     .Case("lanai", Triple::lanai)
     .Case("renderscript32", Triple::renderscript32)
@@ -830,6 +835,7 @@ static Triple::ObjectFormatType getDefaultFormat(const Triple &T) {
   case Triple::sparcv9:
   case Triple::spir64:
   case Triple::spir:
+  case Triple::air64:
   case Triple::tce:
   case Triple::tcele:
   case Triple::thumbeb:
@@ -1432,6 +1438,7 @@ static unsigned getArchPointerBitWidth(llvm::Triple::ArchType Arch) {
   case llvm::Triple::sparcv9:
   case llvm::Triple::spir64:
   case llvm::Triple::spirv64:
+  case llvm::Triple::air64:
   case llvm::Triple::systemz:
   case llvm::Triple::ve:
   case llvm::Triple::wasm64:
@@ -1464,6 +1471,7 @@ Triple Triple::get32BitArchVariant() const {
   case Triple::msp430:
   case Triple::systemz:
   case Triple::ve:
+  case Triple::air64:
     T.setArch(UnknownArch);
     break;
 
@@ -1573,6 +1581,7 @@ Triple Triple::get64BitArchVariant() const {
   case Triple::sparcv9:
   case Triple::spir64:
   case Triple::spirv64:
+  case Triple::air64:
   case Triple::systemz:
   case Triple::ve:
   case Triple::wasm64:
@@ -1644,6 +1653,7 @@ Triple Triple::getBigEndianArchVariant() const {
   case Triple::spir:
   case Triple::spirv32:
   case Triple::spirv64:
+  case Triple::air64:
   case Triple::wasm32:
   case Triple::wasm64:
   case Triple::x86:
@@ -1752,6 +1762,7 @@ bool Triple::isLittleEndian() const {
   case Triple::spir:
   case Triple::spirv32:
   case Triple::spirv64:
+  case Triple::air64:
   case Triple::tcele:
   case Triple::thumb:
   case Triple::ve:
