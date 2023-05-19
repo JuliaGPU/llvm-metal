@@ -112,7 +112,7 @@ int main(int argc, char **argv) {
   TargetOptions Options;
   std::unique_ptr<TargetMachine> Target =
       std::unique_ptr<TargetMachine>(TheTarget->createTargetMachine(
-          TheTriple.getTriple(), "", "", Options, Reloc::Static));
+          TheTriple.getTriple(), "", "", Options, Reloc::Static, llvm::None, CodeGenOpt::None));
   assert(Target && "Could not allocate target machine!");
 
   // Figure out where we are going to send the output.
