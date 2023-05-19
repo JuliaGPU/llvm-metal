@@ -54,13 +54,6 @@ void MetalPassConfig::addIRPasses() {
   addPass(createMetalFinalPass());
   addPass(createMetalFinalModuleCleanupPass());
 
-  // cleanup
-  addPass(createTailCallEliminationPass());
-  addPass(createCFGSimplificationPass());
-  addPass(createInstructionCombiningPass());
-  addPass(createGVNPass());
-  addPass(createAggressiveDCEPass());
-
   TargetPassConfig::addIRPasses();
 }
 
