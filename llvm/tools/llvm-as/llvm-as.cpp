@@ -67,6 +67,11 @@ static cl::opt<std::string> ClDataLayout("data-layout",
                                          cl::value_desc("layout-string"),
                                          cl::init(""), cl::cat(AsCat));
 
+static cl::opt<std::string> BitcodeVersion("bitcode-version",
+                                           cl::desc("Override bitcode version"),
+                                           cl::value_desc("version-string"),
+                                           cl::init(""), cl::cat(AsCat));
+
 static void WriteOutputFile(const Module *M, const ModuleSummaryIndex *Index) {
   // Infer the output filename if needed.
   if (OutputFilename.empty()) {
@@ -100,8 +105,14 @@ static void WriteOutputFile(const Module *M, const ModuleSummaryIndex *Index) {
       // any non-null Index along with it as a per-module Index.
       // If both are empty, this will give an empty module block, which is
       // the expected behavior.
-      WriteBitcodeToFile(*M, Out->os(), PreserveBitcodeUseListOrder,
-                         IndexToWrite, EmitModuleHash);
+      if (BitcodeVersion.empty())
+        WriteBitcodeToFile(*M, Out->os(), PreserveBitcodeUseListOrder,
+                           IndexToWrite, EmitModuleHash);
+      else if (BitcodeVersion == "5.0")
+        WriteBitcode50ToFile(*M, Out->os(), PreserveBitcodeUseListOrder,
+                             IndexToWrite, EmitModuleHash);
+      else
+        report_fatal_error("Unsupported bitcode version");
     else
       // Otherwise, with an empty Module but non-empty Index, we write a
       // combined index.
