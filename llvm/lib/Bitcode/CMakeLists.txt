@@ -1,3 +1,4 @@
 add_subdirectory(Reader)
 add_subdirectory(Writer)
 add_subdirectory(Writer50)
+add_subdirectory(Writer70)

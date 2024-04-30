@@ -1,4 +1,4 @@
-//===- ValueEnumerator50.cpp - Number values and types for bitcode writer -===//
+//===- ValueEnumerator70.cpp - Number values and types for bitcode writer -===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -7,32 +7,53 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file implements the ValueEnumerator50 class.
+// This file implements the ValueEnumerator70 class.
 //
 //===----------------------------------------------------------------------===//
 
-#include "ValueEnumerator50.h"
-#include "llvm/ADT/STLExtras.h"
-#include "llvm/ADT/SmallPtrSet.h"
-#include "llvm/IR/Constants.h"
+#include "ValueEnumerator70.h"
+#include "llvm/ADT/SmallVector.h"
+#include "llvm/Config/llvm-config.h"
+#include "llvm/IR/Argument.h"
+#include "llvm/IR/BasicBlock.h"
+#include "llvm/IR/Constant.h"
 #include "llvm/IR/DebugInfoMetadata.h"
 #include "llvm/IR/DerivedTypes.h"
+#include "llvm/IR/Function.h"
+#include "llvm/IR/GlobalAlias.h"
+#include "llvm/IR/GlobalIFunc.h"
+#include "llvm/IR/GlobalObject.h"
+#include "llvm/IR/GlobalValue.h"
+#include "llvm/IR/GlobalVariable.h"
+#include "llvm/IR/Instruction.h"
 #include "llvm/IR/Instructions.h"
+#include "llvm/IR/Metadata.h"
 #include "llvm/IR/Module.h"
-#include "llvm/IR/UseListOrder.h"
+#include "llvm/IR/Operator.h"
+#include "llvm/IR/Type.h"
+#include "llvm/IR/Use.h"
+#include "llvm/IR/User.h"
+#include "llvm/IR/Value.h"
 #include "llvm/IR/ValueSymbolTable.h"
+#include "llvm/Support/Casting.h"
+#include "llvm/Support/Compiler.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/MathExtras.h"
 #include "llvm/Support/raw_ostream.h"
 #include <algorithm>
+#include <cstddef>
+#include <iterator>
+#include <tuple>
+
 using namespace llvm;
 
 namespace {
 struct OrderMap {
   DenseMap<const Value *, std::pair<unsigned, bool>> IDs;
-  unsigned LastGlobalConstantID;
-  unsigned LastGlobalValueID;
+  unsigned LastGlobalConstantID = 0;
+  unsigned LastGlobalValueID = 0;
 
-  OrderMap() : LastGlobalConstantID(0), LastGlobalValueID(0) {}
+  OrderMap() = default;
 
   bool isGlobalConstant(unsigned ID) const {
     return ID <= LastGlobalConstantID;
@@ -58,11 +79,13 @@ static void orderValue(const Value *V, OrderMap &OM) {
   if (OM.lookup(V).first)
     return;
 
-  if (const Constant *C = dyn_cast<Constant>(V))
-    if (C->getNumOperands() && !isa<GlobalValue>(C))
+  if (const Constant *C = dyn_cast<Constant>(V)) {
+    if (C->getNumOperands() && !isa<GlobalValue>(C)) {
       for (const Value *Op : C->operands())
         if (!isa<BasicBlock>(Op) && !isa<GlobalValue>(Op))
           orderValue(Op, OM);
+    }
+  }
 
   // Note: we cannot cache this lookup above, since inserting into the map
   // changes the map's size, and thus affects the other IDs.
@@ -70,8 +93,8 @@ static void orderValue(const Value *V, OrderMap &OM) {
 }
 
 static OrderMap orderModule(const Module &M) {
-  // This needs to match the order used by ValueEnumerator50::ValueEnumerator50()
-  // and ValueEnumerator50::incorporateFunction().
+  // This needs to match the order used by ValueEnumerator70::ValueEnumerator70()
+  // and ValueEnumerator70::incorporateFunction().
   OrderMap OM;
 
   // In the reader, initializers of GlobalValues are set *after* all the
@@ -98,7 +121,7 @@ static OrderMap orderModule(const Module &M) {
 
   // Initializers of GlobalValues are processed in
   // BitcodeReader::ResolveGlobalAndAliasInits().  Match the order there rather
-  // than ValueEnumerator50, and match the code in predictValueUseListOrderImpl()
+  // than ValueEnumerator70, and match the code in predictValueUseListOrderImpl()
   // by giving IDs in reverse order.
   //
   // Since GlobalValues never reference each other directly (just through
@@ -117,7 +140,7 @@ static OrderMap orderModule(const Module &M) {
   for (const Function &F : M) {
     if (F.isDeclaration())
       continue;
-    // Here we need to match the union of ValueEnumerator50::incorporateFunction()
+    // Here we need to match the union of ValueEnumerator70::incorporateFunction()
     // and WriteFunction().  Basic blocks are implicitly declared before
     // anything else (by declaring their size).
     for (const BasicBlock &BB : F)
@@ -125,11 +148,12 @@ static OrderMap orderModule(const Module &M) {
     for (const Argument &A : F.args())
       orderValue(&A, OM);
     for (const BasicBlock &BB : F)
-      for (const Instruction &I : BB)
+      for (const Instruction &I : BB) {
         for (const Value *Op : I.operands())
           if ((isa<Constant>(*Op) && !isa<GlobalValue>(*Op)) ||
               isa<InlineAsm>(*Op))
             orderValue(Op, OM);
+      }
     for (const BasicBlock &BB : F)
       for (const Instruction &I : BB)
         orderValue(&I, OM);
@@ -141,7 +165,7 @@ static void predictValueUseListOrderImpl(const Value *V, const Function *F,
                                          unsigned ID, const OrderMap &OM,
                                          UseListOrderStack &Stack) {
   // Predict use-list order for this one.
-  typedef std::pair<const Use *, unsigned> Entry;
+  using Entry = std::pair<const Use *, unsigned>;
   SmallVector<Entry, 64> List;
   for (const Use &U : V->uses())
     // Check if this user will be serialized.
@@ -153,7 +177,7 @@ static void predictValueUseListOrderImpl(const Value *V, const Function *F,
     return;
 
   bool IsGlobalValue = OM.isGlobalValue(ID);
-  std::sort(List.begin(), List.end(), [&](const Entry &L, const Entry &R) {
+  llvm::sort(List, [&](const Entry &L, const Entry &R) {
     const Use *LU = L.first;
     const Use *RU = R.first;
     if (LU == RU)
@@ -193,9 +217,9 @@ static void predictValueUseListOrderImpl(const Value *V, const Function *F,
     return LU->getOperandNo() > RU->getOperandNo();
   });
 
-  if (std::is_sorted(
-          List.begin(), List.end(),
-          [](const Entry &L, const Entry &R) { return L.second < R.second; }))
+  if (llvm::is_sorted(List, [](const Entry &L, const Entry &R) {
+        return L.second < R.second;
+      }))
     // Order is already correct.
     return;
 
@@ -220,11 +244,13 @@ static void predictValueUseListOrder(const Value *V, const Function *F,
     predictValueUseListOrderImpl(V, F, IDPair.first, OM, Stack);
 
   // Recursive descent into constants.
-  if (const Constant *C = dyn_cast<Constant>(V))
-    if (C->getNumOperands()) // Visit GlobalValues.
+  if (const Constant *C = dyn_cast<Constant>(V)) {
+    if (C->getNumOperands()) { // Visit GlobalValues.
       for (const Value *Op : C->operands())
         if (isa<Constant>(Op)) // Visit GlobalValues.
           predictValueUseListOrder(Op, F, OM, Stack);
+    }
+  }
 }
 
 static UseListOrderStack predictUseListOrder(const Module &M) {
@@ -249,10 +275,11 @@ static UseListOrderStack predictUseListOrder(const Module &M) {
     for (const Argument &A : F.args())
       predictValueUseListOrder(&A, &F, OM, Stack);
     for (const BasicBlock &BB : F)
-      for (const Instruction &I : BB)
+      for (const Instruction &I : BB) {
         for (const Value *Op : I.operands())
           if (isa<Constant>(*Op) || isa<InlineAsm>(*Op)) // Visit GlobalValues.
             predictValueUseListOrder(Op, &F, OM, Stack);
+      }
     for (const BasicBlock &BB : F)
       for (const Instruction &I : BB)
         predictValueUseListOrder(&I, &F, OM, Stack);
@@ -287,15 +314,16 @@ static bool isIntOrIntVectorValue(const std::pair<const Value*, unsigned> &V) {
   return V.first->getType()->isIntOrIntVectorTy();
 }
 
-ValueEnumerator50::ValueEnumerator50(const Module &M,
+ValueEnumerator70::ValueEnumerator70(const Module &M,
                                  bool ShouldPreserveUseListOrder)
     : ShouldPreserveUseListOrder(ShouldPreserveUseListOrder) {
   if (ShouldPreserveUseListOrder)
     UseListOrders = predictUseListOrder(M);
 
   // Enumerate the global variables.
-  for (const GlobalVariable &GV : M.globals())
+  for (const GlobalVariable &GV : M.globals()) {
     EnumerateValue(&GV);
+  }
 
   // Enumerate the functions.
   for (const Function & F : M) {
@@ -304,8 +332,9 @@ ValueEnumerator50::ValueEnumerator50(const Module &M,
   }
 
   // Enumerate the aliases.
-  for (const GlobalAlias &GA : M.aliases())
+  for (const GlobalAlias &GA : M.aliases()) {
     EnumerateValue(&GA);
+  }
 
   // Enumerate the ifuncs.
   for (const GlobalIFunc &GIF : M.ifuncs())
@@ -337,7 +366,7 @@ ValueEnumerator50::ValueEnumerator50(const Module &M,
 
   // Enumerate the metadata type.
   //
-  // TODO: Move this to ValueEnumerator50::EnumerateOperandType() once bitcode
+  // TODO: Move this to ValueEnumerator70::EnumerateOperandType() once bitcode
   // only encodes the metadata type when it's used as a value.
   EnumerateType(Type::getMetadataTy(M.getContext()));
 
@@ -416,23 +445,23 @@ ValueEnumerator50::ValueEnumerator50(const Module &M,
   organizeMetadata();
 }
 
-unsigned ValueEnumerator50::getInstructionID(const Instruction *Inst) const {
+unsigned ValueEnumerator70::getInstructionID(const Instruction *Inst) const {
   InstructionMapType::const_iterator I = InstructionMap.find(Inst);
   assert(I != InstructionMap.end() && "Instruction is not mapped!");
   return I->second;
 }
 
-unsigned ValueEnumerator50::getComdatID(const Comdat *C) const {
+unsigned ValueEnumerator70::getComdatID(const Comdat *C) const {
   unsigned ComdatID = Comdats.idFor(C);
   assert(ComdatID && "Comdat not found!");
   return ComdatID;
 }
 
-void ValueEnumerator50::setInstructionID(const Instruction *I) {
+void ValueEnumerator70::setInstructionID(const Instruction *I) {
   InstructionMap[I] = InstructionCount++;
 }
 
-unsigned ValueEnumerator50::getValueID(const Value *V) const {
+unsigned ValueEnumerator70::getValueID(const Value *V) const {
   if (auto *MD = dyn_cast<MetadataAsValue>(V))
     return getMetadataID(MD->getMetadata());
 
@@ -442,7 +471,7 @@ unsigned ValueEnumerator50::getValueID(const Value *V) const {
 }
 
 #if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
-LLVM_DUMP_METHOD void ValueEnumerator50::dump() const {
+LLVM_DUMP_METHOD void ValueEnumerator70::dump() const {
   print(dbgs(), ValueMap, "Default");
   dbgs() << '\n';
   print(dbgs(), MetadataMap, "MetaData");
@@ -450,14 +479,12 @@ LLVM_DUMP_METHOD void ValueEnumerator50::dump() const {
 }
 #endif
 
-void ValueEnumerator50::print(raw_ostream &OS, const ValueMapType &Map,
+void ValueEnumerator70::print(raw_ostream &OS, const ValueMapType &Map,
                             const char *Name) const {
-
   OS << "Map Name: " << Name << "\n";
   OS << "Size: " << Map.size() << "\n";
   for (ValueMapType::const_iterator I = Map.begin(),
          E = Map.end(); I != E; ++I) {
-
     const Value *V = I->first;
     if (V->hasName())
       OS << "Value: " << V->getName();
@@ -466,7 +493,7 @@ void ValueEnumerator50::print(raw_ostream &OS, const ValueMapType &Map,
     V->print(errs());
     errs() << '\n';
 
-    OS << " Uses(" << std::distance(V->use_begin(),V->use_end()) << "):";
+    OS << " Uses(" << V->getNumUses() << "):";
     for (const Use &U : V->uses()) {
       if (&U != &*V->use_begin())
         OS << ",";
@@ -480,9 +507,8 @@ void ValueEnumerator50::print(raw_ostream &OS, const ValueMapType &Map,
   }
 }
 
-void ValueEnumerator50::print(raw_ostream &OS, const MetadataMapType &Map,
+void ValueEnumerator70::print(raw_ostream &OS, const MetadataMapType &Map,
                             const char *Name) const {
-
   OS << "Map Name: " << Name << "\n";
   OS << "Size: " << Map.size() << "\n";
   for (auto I = Map.begin(), E = Map.end(); I != E; ++I) {
@@ -495,7 +521,7 @@ void ValueEnumerator50::print(raw_ostream &OS, const MetadataMapType &Map,
 }
 
 /// OptimizeConstants - Reorder constant pool for denser encoding.
-void ValueEnumerator50::OptimizeConstants(unsigned CstStart, unsigned CstEnd) {
+void ValueEnumerator70::OptimizeConstants(unsigned CstStart, unsigned CstEnd) {
   if (CstStart == CstEnd || CstStart+1 == CstEnd) return;
 
   if (ShouldPreserveUseListOrder)
@@ -524,10 +550,9 @@ void ValueEnumerator50::OptimizeConstants(unsigned CstStart, unsigned CstEnd) {
     ValueMap[Values[CstStart].first] = CstStart+1;
 }
 
-
 /// EnumerateValueSymbolTable - Insert all of the values in the specified symbol
 /// table into the values table.
-void ValueEnumerator50::EnumerateValueSymbolTable(const ValueSymbolTable &VST) {
+void ValueEnumerator70::EnumerateValueSymbolTable(const ValueSymbolTable &VST) {
   for (ValueSymbolTable::const_iterator VI = VST.begin(), VE = VST.end();
        VI != VE; ++VI)
     EnumerateValue(VI->getValue());
@@ -535,30 +560,30 @@ void ValueEnumerator50::EnumerateValueSymbolTable(const ValueSymbolTable &VST) {
 
 /// Insert all of the values referenced by named metadata in the specified
 /// module.
-void ValueEnumerator50::EnumerateNamedMetadata(const Module &M) {
+void ValueEnumerator70::EnumerateNamedMetadata(const Module &M) {
   for (const auto &I : M.named_metadata())
     EnumerateNamedMDNode(&I);
 }
 
-void ValueEnumerator50::EnumerateNamedMDNode(const NamedMDNode *MD) {
+void ValueEnumerator70::EnumerateNamedMDNode(const NamedMDNode *MD) {
   for (unsigned i = 0, e = MD->getNumOperands(); i != e; ++i)
     EnumerateMetadata(nullptr, MD->getOperand(i));
 }
 
-unsigned ValueEnumerator50::getMetadataFunctionID(const Function *F) const {
+unsigned ValueEnumerator70::getMetadataFunctionID(const Function *F) const {
   return F ? getValueID(F) + 1 : 0;
 }
 
-void ValueEnumerator50::EnumerateMetadata(const Function *F, const Metadata *MD) {
+void ValueEnumerator70::EnumerateMetadata(const Function *F, const Metadata *MD) {
   EnumerateMetadata(getMetadataFunctionID(F), MD);
 }
 
-void ValueEnumerator50::EnumerateFunctionLocalMetadata(
+void ValueEnumerator70::EnumerateFunctionLocalMetadata(
     const Function &F, const LocalAsMetadata *Local) {
   EnumerateFunctionLocalMetadata(getMetadataFunctionID(&F), Local);
 }
 
-void ValueEnumerator50::dropFunctionFromMetadata(
+void ValueEnumerator70::dropFunctionFromMetadata(
     MetadataMapType::value_type &FirstMD) {
   SmallVector<const MDNode *, 64> Worklist;
   auto push = [&Worklist](MetadataMapType::value_type &MD) {
@@ -588,7 +613,7 @@ void ValueEnumerator50::dropFunctionFromMetadata(
     }
 }
 
-void ValueEnumerator50::EnumerateMetadata(unsigned F, const Metadata *MD) {
+void ValueEnumerator70::EnumerateMetadata(unsigned F, const Metadata *MD) {
   // It's vital for reader efficiency that uniqued subgraphs are done in
   // post-order; it's expensive when their operands have forward references.
   // If a distinct node is referenced from a uniqued node, it'll be delayed
@@ -636,7 +661,7 @@ void ValueEnumerator50::EnumerateMetadata(unsigned F, const Metadata *MD) {
   }
 }
 
-const MDNode *ValueEnumerator50::enumerateMetadataImpl(unsigned F, const Metadata *MD) {
+const MDNode *ValueEnumerator70::enumerateMetadataImpl(unsigned F, const Metadata *MD) {
   if (!MD)
     return nullptr;
 
@@ -670,7 +695,7 @@ const MDNode *ValueEnumerator50::enumerateMetadataImpl(unsigned F, const Metadat
 
 /// EnumerateFunctionLocalMetadataa - Incorporate function-local metadata
 /// information reachable from the metadata.
-void ValueEnumerator50::EnumerateFunctionLocalMetadata(
+void ValueEnumerator70::EnumerateFunctionLocalMetadata(
     unsigned F, const LocalAsMetadata *Local) {
   assert(F && "Expected a function");
 
@@ -704,7 +729,7 @@ static unsigned getMetadataTypeOrder(const Metadata *MD) {
   return N->isDistinct() ? 2 : 3;
 }
 
-void ValueEnumerator50::organizeMetadata() {
+void ValueEnumerator70::organizeMetadata() {
   assert(MetadataMap.size() == MDs.size() &&
          "Metadata map and vector out of sync");
 
@@ -724,14 +749,15 @@ void ValueEnumerator50::organizeMetadata() {
   // and then sort by the original/current ID.  Since the IDs are guaranteed to
   // be unique, the result of std::sort will be deterministic.  There's no need
   // for std::stable_sort.
-  std::sort(Order.begin(), Order.end(), [this](MDIndex LHS, MDIndex RHS) {
+  llvm::sort(Order, [this](MDIndex LHS, MDIndex RHS) {
     return std::make_tuple(LHS.F, getMetadataTypeOrder(LHS.get(MDs)), LHS.ID) <
            std::make_tuple(RHS.F, getMetadataTypeOrder(RHS.get(MDs)), RHS.ID);
   });
 
   // Rebuild MDs, index the metadata ranges for each function in FunctionMDs,
   // and fix up MetadataMap.
-  std::vector<const Metadata *> OldMDs = std::move(MDs);
+  std::vector<const Metadata *> OldMDs;
+  MDs.swap(OldMDs);
   MDs.reserve(OldMDs.size());
   for (unsigned I = 0, E = Order.size(); I != E && !Order[I].F; ++I) {
     auto *MD = Order[I].get(OldMDs);
@@ -773,7 +799,7 @@ void ValueEnumerator50::organizeMetadata() {
   FunctionMDInfo[PrevF] = R;
 }
 
-void ValueEnumerator50::incorporateFunctionMetadata(const Function &F) {
+void ValueEnumerator70::incorporateFunctionMetadata(const Function &F) {
   NumModuleMDs = MDs.size();
 
   auto R = FunctionMDInfo.lookup(getValueID(&F) + 1);
@@ -782,7 +808,7 @@ void ValueEnumerator50::incorporateFunctionMetadata(const Function &F) {
              FunctionMDs.begin() + R.Last);
 }
 
-void ValueEnumerator50::EnumerateValue(const Value *V) {
+void ValueEnumerator70::EnumerateValue(const Value *V) {
   assert(!V->getType()->isVoidTy() && "Can't insert void values!");
   assert(!isa<MetadataAsValue>(V) && "EnumerateValue doesn't handle Metadata!");
 
@@ -835,7 +861,7 @@ void ValueEnumerator50::EnumerateValue(const Value *V) {
 }
 
 
-void ValueEnumerator50::EnumerateType(Type *Ty) {
+void ValueEnumerator70::EnumerateType(Type *Ty) {
   unsigned *TypeID = &TypeMap[Ty];
 
   // We've already seen this type.
@@ -865,6 +891,12 @@ void ValueEnumerator50::EnumerateType(Type *Ty) {
   if (*TypeID && *TypeID != ~0U)
     return;
 
+  // Check to see if we're dealing with opaque pointers
+  auto *PTy = dyn_cast<PointerType>(Ty);
+  if (PTy && PTy->isOpaque()) {
+    llvm_unreachable("Opaque pointers are not supported in LLVM 7.0; please run with --opaque-pointers=0");
+  }
+
   // Add this type now that its contents are all happily enumerated.
   Types.push_back(Ty);
 
@@ -873,7 +905,7 @@ void ValueEnumerator50::EnumerateType(Type *Ty) {
 
 // Enumerate the types for the specified value.  If the value is a constant,
 // walk through it, enumerating the types of the constant.
-void ValueEnumerator50::EnumerateOperandType(const Value *V) {
+void ValueEnumerator70::EnumerateOperandType(const Value *V) {
   EnumerateType(V->getType());
 
   assert(!isa<MetadataAsValue>(V) && "Unexpected metadata operand");
@@ -897,13 +929,10 @@ void ValueEnumerator50::EnumerateOperandType(const Value *V) {
 
     EnumerateOperandType(Op);
   }
-  if (auto *CE = dyn_cast<ConstantExpr>(C))
-    if (CE->getOpcode() == Instruction::ShuffleVector)
-      EnumerateOperandType(CE->getShuffleMaskForBitcode());
 }
 
-extern uint64_t getAttrKindEncoding50(Attribute::AttrKind Kind);
-void ValueEnumerator50::EnumerateAttributes(AttributeList PAL) {
+extern uint64_t getAttrKindEncoding70(Attribute::AttrKind Kind);
+void ValueEnumerator70::EnumerateAttributes(AttributeList PAL) {
   if (PAL.isEmpty()) return;  // null is always 0.
 
   // Do a lookup.
@@ -919,11 +948,11 @@ void ValueEnumerator50::EnumerateAttributes(AttributeList PAL) {
     AttributeSet AS = PAL.getAttributes(i);
     if (!AS.hasAttributes())
       continue;
-    // we need to skip attribute sets that don't have any valid LLVM 5.0 encoding
+    // we need to skip attribute sets that don't have any valid LLVM 7.0 encoding
     bool has_any_valid_attr = false;
     for (Attribute Attr : AS) {
       if (Attr.isEnumAttribute() || Attr.isIntAttribute()) {
-        if (getAttrKindEncoding50(Attr.getKindAsEnum()) > 0) {
+        if (getAttrKindEncoding70(Attr.getKindAsEnum()) > 0) {
           has_any_valid_attr = true;
           break;
         }
@@ -941,7 +970,7 @@ void ValueEnumerator50::EnumerateAttributes(AttributeList PAL) {
     }
     auto AS_index = i;
     if (!has_any_valid_attr) {
-      AS_index = ValueEnumerator50::invalid_attribute_group_id;
+      AS_index = invalid_attribute_group_id;
     }
 
     IndexAndAttrSet Pair = {AS_index, AS};
@@ -953,7 +982,7 @@ void ValueEnumerator50::EnumerateAttributes(AttributeList PAL) {
   }
 }
 
-void ValueEnumerator50::incorporateFunction(const Function &F) {
+void ValueEnumerator70::incorporateFunction(const Function &F) {
   InstructionCount = 0;
   NumModuleValues = Values.size();
 
@@ -962,9 +991,9 @@ void ValueEnumerator50::incorporateFunction(const Function &F) {
   incorporateFunctionMetadata(F);
 
   // Adding function arguments to the value table.
-  for (const auto &I : F.args())
+  for (const auto &I : F.args()) {
     EnumerateValue(&I);
-
+  }
   FirstFuncConstantID = Values.size();
 
   // Add all function-level constants to the value table.
@@ -995,10 +1024,12 @@ void ValueEnumerator50::incorporateFunction(const Function &F) {
   for (const BasicBlock &BB : F) {
     for (const Instruction &I : BB) {
       for (const Use &OI : I.operands()) {
-        if (auto *MD = dyn_cast<MetadataAsValue>(&OI))
-          if (auto *Local = dyn_cast<LocalAsMetadata>(MD->getMetadata()))
+        if (auto *MD = dyn_cast<MetadataAsValue>(&OI)) {
+          if (auto *Local = dyn_cast<LocalAsMetadata>(MD->getMetadata())) {
             // Enumerate metadata after the instructions they might refer to.
             FnLocalMDVector.push_back(Local);
+          }
+        }
       }
 
       if (!I.getType()->isVoidTy())
@@ -1016,7 +1047,7 @@ void ValueEnumerator50::incorporateFunction(const Function &F) {
   }
 }
 
-void ValueEnumerator50::purgeFunction() {
+void ValueEnumerator70::purgeFunction() {
   /// Remove purged values from the ValueMap.
   for (unsigned i = NumModuleValues, e = Values.size(); i != e; ++i)
     ValueMap.erase(Values[i].first);
@@ -1041,7 +1072,7 @@ static void IncorporateFunctionInfoGlobalBBIDs(const Function *F,
 /// getGlobalBasicBlockID - This returns the function-specific ID for the
 /// specified basic block.  This is relatively expensive information, so it
 /// should only be used by rare constructs such as address-of-label.
-unsigned ValueEnumerator50::getGlobalBasicBlockID(const BasicBlock *BB) const {
+unsigned ValueEnumerator70::getGlobalBasicBlockID(const BasicBlock *BB) const {
   unsigned &Idx = GlobalBasicBlockIDs[BB];
   if (Idx != 0)
     return Idx-1;
@@ -1050,6 +1081,6 @@ unsigned ValueEnumerator50::getGlobalBasicBlockID(const BasicBlock *BB) const {
   return getGlobalBasicBlockID(BB);
 }
 
-uint64_t ValueEnumerator50::computeBitsRequiredForTypeIndicies() const {
+uint64_t ValueEnumerator70::computeBitsRequiredForTypeIndicies() const {
   return Log2_32_Ceil(getTypes().size() + 1);
 }
