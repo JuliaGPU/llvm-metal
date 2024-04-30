@@ -111,6 +111,9 @@ static void WriteOutputFile(const Module *M, const ModuleSummaryIndex *Index) {
       else if (BitcodeVersion == "5.0")
         WriteBitcode50ToFile(*M, Out->os(), PreserveBitcodeUseListOrder,
                              IndexToWrite, EmitModuleHash);
+      else if (BitcodeVersion == "7.0")
+        WriteBitcode70ToFile(*M, Out->os(), PreserveBitcodeUseListOrder,
+                             IndexToWrite, EmitModuleHash);
       else
         report_fatal_error("Unsupported bitcode version");
     else

@@ -1,4 +1,4 @@
-//===-- Bitcode/Writer50/ValueEnumerator50.h - Number values ----*- C++ -*-===//
+//===- Bitcode/Writer70/ValueEnumerator70.h - Number values ----*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -11,59 +11,60 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_LIB_BITCODE_WRITER50_VALUEENUMERATOR50_H
-#define LLVM_LIB_BITCODE_WRITER50_VALUEENUMERATOR50_H
+#ifndef LLVM_LIB_BITCODE_WRITER70_VALUEENUMERATOR70_H
+#define LLVM_LIB_BITCODE_WRITER70_VALUEENUMERATOR70_H
 
+#include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/UniqueVector.h"
 #include "llvm/IR/Attributes.h"
-#include "llvm/IR/Metadata.h"
-#include "llvm/IR/Type.h"
 #include "llvm/IR/UseListOrder.h"
+#include <cassert>
+#include <cstdint>
+#include <utility>
 #include <vector>
 
 namespace llvm {
 
-class Type;
-class Value;
-class Instruction;
 class BasicBlock;
 class Comdat;
+class DIArgList;
 class Function;
-class Module;
-class Metadata;
+class Instruction;
 class LocalAsMetadata;
 class MDNode;
-class MDOperand;
+class Metadata;
+class Module;
 class NamedMDNode;
-class AttributeList;
-class ValueSymbolTable;
-class MDSymbolTable;
 class raw_ostream;
+class Type;
+class Value;
+class ValueSymbolTable;
 
-class ValueEnumerator50 {
+
+class ValueEnumerator70 {
 public:
-  typedef std::vector<Type*> TypeList;
+  using TypeList = std::vector<Type *>;
 
   // For each value, we remember its Value* and occurrence frequency.
-  typedef std::vector<std::pair<const Value*, unsigned> > ValueList;
+  using ValueList = std::vector<std::pair<const Value *, unsigned>>;
 
   /// Attribute groups as encoded in bitcode are almost AttributeSets, but they
   /// include the AttributeList index, so we have to track that in our map.
-  typedef std::pair<unsigned, AttributeSet> IndexAndAttrSet;
+  using IndexAndAttrSet = std::pair<unsigned, AttributeSet>;
 
   UseListOrderStack UseListOrders;
 
 private:
-  typedef DenseMap<Type*, unsigned> TypeMapType;
+  using TypeMapType = DenseMap<Type *, unsigned>;
   TypeMapType TypeMap;
   TypeList Types;
 
-  typedef DenseMap<const Value*, unsigned> ValueMapType;
+  using ValueMapType = DenseMap<const Value *, unsigned>;
   ValueMapType ValueMap;
   ValueList Values;
 
-  typedef UniqueVector<const Comdat *> ComdatSetType;
+  using ComdatSetType = UniqueVector<const Comdat *>;
   ComdatSetType Comdats;
 
   std::vector<const Metadata *> MDs;
@@ -88,7 +89,7 @@ private:
     }
   };
 
-  typedef DenseMap<const Metadata *, MDIndex> MetadataMapType;
+  using MetadataMapType = DenseMap<const Metadata *, MDIndex>;
   MetadataMapType MetadataMap;
 
   /// Range of metadata IDs, as a half-open range.
@@ -99,18 +100,18 @@ private:
     /// Number of strings in the prefix of the metadata range.
     unsigned NumStrings = 0;
 
-    MDRange() {}
+    MDRange() = default;
     explicit MDRange(unsigned First) : First(First) {}
   };
   SmallDenseMap<unsigned, MDRange, 1> FunctionMDInfo;
 
   bool ShouldPreserveUseListOrder;
 
-  typedef DenseMap<IndexAndAttrSet, unsigned> AttributeGroupMapType;
+  using AttributeGroupMapType = DenseMap<IndexAndAttrSet, unsigned>;
   AttributeGroupMapType AttributeGroupMap;
   std::vector<IndexAndAttrSet> AttributeGroups;
 
-  typedef DenseMap<AttributeList, unsigned> AttributeListMapType;
+  using AttributeListMapType = DenseMap<AttributeList, unsigned>;
   AttributeListMapType AttributeListMap;
   std::vector<AttributeList> AttributeLists;
 
@@ -118,7 +119,7 @@ private:
   /// the "getGlobalBasicBlockID" method.
   mutable DenseMap<const BasicBlock*, unsigned> GlobalBasicBlockIDs;
 
-  typedef DenseMap<const Instruction*, unsigned> InstructionMapType;
+  using InstructionMapType = DenseMap<const Instruction *, unsigned>;
   InstructionMapType InstructionMap;
   unsigned InstructionCount;
 
@@ -137,11 +138,10 @@ private:
 
   unsigned FirstFuncConstantID;
   unsigned FirstInstID;
-
-  ValueEnumerator50(const ValueEnumerator50 &) = delete;
-  void operator=(const ValueEnumerator50 &) = delete;
 public:
-  ValueEnumerator50(const Module &M, bool ShouldPreserveUseListOrder);
+  ValueEnumerator70(const Module &M, bool ShouldPreserveUseListOrder);
+  ValueEnumerator70(const ValueEnumerator70 &) = delete;
+  ValueEnumerator70 &operator=(const ValueEnumerator70 &) = delete;
 
   //! signals that an attribute group id is invalid / should not be used
   static constexpr const uint32_t invalid_attribute_group_id = 0x7FFF'FFFFu;
@@ -166,7 +166,7 @@ public:
 
   unsigned getTypeID(Type *T) const {
     TypeMapType::const_iterator I = TypeMap.find(T);
-    assert(I != TypeMap.end() && "Type not in ValueEnumerator50!");
+    assert(I != TypeMap.end() && "Type not in ValueEnumerator70!");
     return I->second-1;
   }
 
@@ -176,7 +176,7 @@ public:
   unsigned getAttributeListID(AttributeList PAL) const {
     if (PAL.isEmpty()) return 0;  // Null maps to zero.
     AttributeListMapType::const_iterator I = AttributeListMap.find(PAL);
-    assert(I != AttributeListMap.end() && "Attribute not in ValueEnumerator50!");
+    assert(I != AttributeListMap.end() && "Attribute not in ValueEnumerator70!");
     return I->second;
   }
 
@@ -184,7 +184,7 @@ public:
     if (!Group.second.hasAttributes())
       return 0; // Null maps to zero.
     AttributeGroupMapType::const_iterator I = AttributeGroupMap.find(Group);
-    //assert(I != AttributeGroupMap.end() && "Attribute not in ValueEnumerator50!");
+    //assert(I != AttributeGroupMap.end() && "Attribute not in ValueEnumerator70!");
     if (I == AttributeGroupMap.end()) {
       return invalid_attribute_group_id;
     }
@@ -213,13 +213,6 @@ public:
     return makeArrayRef(MDs).slice(NumModuleMDs).slice(NumMDStrings);
   }
 
-  ArrayRef<const Metadata *> getMDs() const {
-    return makeArrayRef(MDs);
-  }
-  const MetadataMapType& getMetadataMap() const {
-    return MetadataMap;
-  }
-
   const TypeList &getTypes() const { return Types; }
   const std::vector<const BasicBlock*> &getBasicBlocks() const {
     return BasicBlocks;
@@ -238,8 +231,7 @@ public:
   unsigned getGlobalBasicBlockID(const BasicBlock *BB) const;
 
   /// incorporateFunction/purgeFunction - If you'd like to deal with a function,
-  /// use these two methods to get its data into the ValueEnumerator50!
-  ///
+  /// use these two methods to get its data into the ValueEnumerator70!
   void incorporateFunction(const Function &F);
   void purgeFunction();
   uint64_t computeBitsRequiredForTypeIndicies() const;
