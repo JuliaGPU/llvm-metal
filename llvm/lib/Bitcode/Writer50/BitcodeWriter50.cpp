@@ -11,9 +11,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-// enable errors when using > 5.0 bitcode enums from LLVMBitCodes.h
-#define LLVM_BITCODE_50 1
-
 #include "llvm/Bitcode/BitcodeWriter.h"
 #include "ValueEnumerator50.h"
 #include "llvm/ADT/StringExtras.h"
@@ -521,8 +518,7 @@ static void writeStringRecord(BitstreamWriter &Stream, unsigned Code,
   Stream.EmitRecord(Code, Vals, AbbrevToUse);
 }
 
-uint64_t getAttrKindEncodingBC50(Attribute::AttrKind Kind); // for use in ValueEnumerator50 as well
-uint64_t getAttrKindEncodingBC50(Attribute::AttrKind Kind) {
+uint64_t getAttrKindEncoding50(Attribute::AttrKind Kind) {
   switch (Kind) {
   default:
     return bitc::ATTR_KIND_INVALID;
@@ -655,8 +651,8 @@ void ModuleBitcodeWriter50::writeAttributeGroupTable() {
 
     for (Attribute Attr : AS) {
       if (Attr.isEnumAttribute() || Attr.isIntAttribute()) {
-        // only encode valid/compatible attributes
-        const auto enc_attr = getAttrKindEncodingBC50(Attr.getKindAsEnum());
+        // only encode attributes that are supported by LLVM 5.0
+        const auto enc_attr = getAttrKindEncoding50(Attr.getKindAsEnum());
         if (enc_attr != llvm::bitc::ATTR_KIND_INVALID) {
           if (Attr.isEnumAttribute()) {
             Record.push_back(0);
@@ -680,13 +676,13 @@ void ModuleBitcodeWriter50::writeAttributeGroupTable() {
         }
       } else {
         assert(Attr.isTypeAttribute());
-        // NOTE: we do want to encode the "byval" attribute (in the 5.0 format -> no type)
+        // type attributes are not supported by LLVM 5.0, but we do want to encode byval
         if (Attr.getKindAsEnum() == Attribute::ByVal) {
-          const auto enc_attr = getAttrKindEncodingBC50(Attr.getKindAsEnum());
+          const auto enc_attr = getAttrKindEncoding50(Attr.getKindAsEnum());
           Record.push_back(0);
           Record.push_back(enc_attr);
+          // the byval type is not supported by LLVM 5.0
         }
-        // else: ignore this
       }
     }
 
