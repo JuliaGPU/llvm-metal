@@ -13,6 +13,7 @@
 
 #include "llvm/Bitcode/BitcodeWriter.h"
 #include "ValueEnumerator50.h"
+#include "ModuleRewriter50.h"
 #include "llvm/ADT/APFloat.h"
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/ArrayRef.h"
@@ -69,6 +70,7 @@
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Support/SHA1.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/Transforms/Utils/Cloning.h"
 #include "llvm/TargetParser/Triple.h"
 #include <algorithm>
 #include <cassert>
@@ -2907,15 +2909,7 @@ void ModuleBitcodeWriter50::writeInstruction(const Instruction &I,
     Vals.push_back(VE.getTypeID(I.getType())); // restype.
     break;
   case Instruction::Freeze: {
-    // freeze instruction is not supported by LLVM 5.0,
-    // but we can more or less emulate it as an identity function
-    // -> encode as a bitcast to the same type
-    auto Operand = I.getOperand(0);
-    Code = bitc::FUNC_CODE_INST_CAST;
-    if (!pushValueAndType(Operand, InstID, Vals))
-      AbbrevToUse = FUNCTION_INST_CAST_ABBREV;
-    Vals.push_back(VE.getTypeID(Operand->getType()));
-    Vals.push_back(getEncodedCastOpcode(Instruction::BitCast));
+    llvm_unreachable("can not encode freeze instruction for LLVM 5.0");
     break;
   }
   case Instruction::CallBr:
@@ -4082,21 +4076,26 @@ void BitcodeWriter50::writeIndex(
 
 /// WriteBitcode50ToFile - Write the specified module to the specified output
 /// stream.
-void llvm::WriteBitcode50ToFile(const Module &M, raw_ostream &Out,
+void llvm::WriteBitcode50ToFile(const Module &_M, raw_ostream &Out,
                                 bool ShouldPreserveUseListOrder,
                                 const ModuleSummaryIndex *Index,
                                 bool GenerateHash, ModuleHash *ModHash) {
   SmallVector<char, 0> Buffer;
   Buffer.reserve(256*1024);
 
+  // Rewrite the module to make the IR compatible
+  auto M = CloneModule(_M);
+  ModuleRewriter50 MR(*M);
+  MR.run();
+
   // If this is darwin or another generic macho target, reserve space for the
   // header.
-  Triple TT(M.getTargetTriple());
+  Triple TT(M->getTargetTriple());
   if (TT.isOSDarwin() || TT.isOSBinFormatMachO())
     Buffer.insert(Buffer.begin(), BWH_HeaderSize, 0);
 
   BitcodeWriter50 Writer(Buffer);
-  Writer.writeModule(M, ShouldPreserveUseListOrder, Index, GenerateHash,
+  Writer.writeModule(*M, ShouldPreserveUseListOrder, Index, GenerateHash,
                      ModHash);
   Writer.writeSymtab();
   Writer.writeStrtab();
