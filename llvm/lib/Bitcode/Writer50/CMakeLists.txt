@@ -3,6 +3,7 @@ add_llvm_component_library(LLVMBitWriter50
   BitcodeWriter50.cpp
   BitcodeWriterPass50.cpp
   ValueEnumerator50.cpp
+  ModuleRewriter50.cpp
 
   DEPENDS
   intrinsics_gen
@@ -13,4 +14,5 @@ add_llvm_component_library(LLVMBitWriter50
   MC
   Object
   Support
+  TransformUtils
   )
