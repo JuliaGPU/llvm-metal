@@ -127,9 +127,9 @@ static OrderMap orderModule(const Module &M) {
   // Since GlobalValues never reference each other directly (just through
   // initializers), their relative IDs only matter for determining order of
   // uses in their initializers.
-  for (const GlobalVariable &G : reverse(M.globals()))
-    orderValue(&G, OM);
-  for (const GlobalAlias &A : reverse(M.aliases()))
+  for (const Function &F : M)
+    orderValue(&F, OM);
+  for (const GlobalAlias &A : M.aliases())
     orderValue(&A, OM);
   for (const GlobalIFunc &I : M.ifuncs())
     orderValue(&I, OM);
