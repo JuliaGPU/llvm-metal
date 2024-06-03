@@ -11,13 +11,14 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "llvm/Bitcode/BitcodeWriter.h"
-#include "ValueEnumerator50.h"
 #include "ModuleRewriter50.h"
+#include "ValueEnumerator50.h"
+#include "PointerTypeAnalysis.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/Triple.h"
-#include "llvm/Bitstream/BitstreamWriter.h"
+#include "llvm/Bitcode/BitcodeWriter.h"
 #include "llvm/Bitcode/LLVMBitCodes.h"
+#include "llvm/Bitstream/BitstreamWriter.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DebugInfoMetadata.h"
 #include "llvm/IR/DerivedTypes.h"
@@ -26,6 +27,7 @@
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Operator.h"
+#include "llvm/IR/TypedPointerType.h"
 #include "llvm/IR/UseListOrder.h"
 #include "llvm/IR/ValueSymbolTable.h"
 #include "llvm/MC/StringTableBuilder.h"
@@ -102,6 +104,10 @@ class ModuleBitcodeWriter50 : public BitcodeWriterBase50 {
   /// The Module to write to bitcode.
   const Module &M;
 
+  // Cache some types
+  Type *I8Ty;
+  Type *I8PtrTy;
+
   /// Enumerates ids for all values in the module.
   ValueEnumerator50 VE;
 
@@ -136,6 +142,9 @@ class ModuleBitcodeWriter50 : public BitcodeWriterBase50 {
   /// backpatched with the offset of the actual VST.
   uint64_t VSTOffsetPlaceholder = 0;
 
+  /// This maps values to their typed pointers
+  PointerTypeMap PointerMap;
+
 public:
   /// Constructs a ModuleBitcodeWriter50 object for the given Module,
   /// writing to the provided \p Buffer.
@@ -145,10 +154,17 @@ public:
                         const ModuleSummaryIndex *Index, bool GenerateHash,
                         ModuleHash *ModHash = nullptr)
       : BitcodeWriterBase50(Stream, StrtabBuilder), Buffer(Buffer), M(M),
-        VE(M, ShouldPreserveUseListOrder), Index(Index),
+        I8Ty(Type::getInt8Ty(M.getContext())),
+        I8PtrTy(TypedPointerType::get(I8Ty, 0)),
+        VE(M, I8PtrTy, ShouldPreserveUseListOrder), Index(Index),
         GenerateHash(GenerateHash), ModHash(ModHash),
-        BitcodeStartBit(Stream.GetCurrentBitNo()) {
-    // imitate Metal by having one llvm.dbg.cu entry per DISubprogram
+        BitcodeStartBit(Stream.GetCurrentBitNo()),
+        PointerMap(PointerTypeAnalysis::run(M)) {
+    // Enumerate the typed pointers
+    for (auto El : PointerMap)
+      VE.EnumerateType(El.second);
+
+    // Imitate Metal by having one llvm.dbg.cu entry per DISubprogram
     if (auto dbg_cu = M.getNamedMetadata("llvm.dbg.cu"); dbg_cu) {
       uint32_t subprogram_count = 0;
       for (const auto &md : VE.getMetadataMap()) {
@@ -336,6 +352,13 @@ private:
   }
 
   unsigned getEncodedAlign(MaybeAlign Alignment) { return encode(Alignment); }
+
+  unsigned getTypeID(Type *T, const Value *V = nullptr);
+  /// getGlobalObjectValueTypeID - returns the element type for a GlobalObject
+  ///
+  /// GlobalObject types are saved by PointerTypeAnalysis as pointers to the
+  /// GlobalObject, but in the bitcode writer we need the pointer element type.
+  unsigned getGlobalObjectValueTypeID(Type *T, const GlobalObject *G);
 };
 
 /// Class to manage the bitcode writing for a combined index.
@@ -431,6 +454,34 @@ private:
   std::map<GlobalValue::GUID, unsigned> &valueIds() { return GUIDToValueIdMap; }
 };
 } // end anonymous namespace
+
+unsigned ModuleBitcodeWriter50::getTypeID(Type *T, const Value *V) {
+  if (!T->isOpaquePointerTy() &&
+      // For Constant, always check PointerMap to make sure OpaquePointer in
+      // things like constant struct/array works.
+      (!V || !isa<Constant>(V)))
+    return VE.getTypeID(T);
+  auto It = PointerMap.find(V);
+  if (It != PointerMap.end())
+    return VE.getTypeID(It->second);
+  // For Constant, return T when cannot find in PointerMap.
+  // FIXME: support ConstantPointerNull which could map to more than one
+  // TypedPointerType.
+  // See https://github.com/llvm/llvm-project/issues/57942.
+  if (V && isa<Constant>(V) && !isa<ConstantPointerNull>(V))
+    return VE.getTypeID(T);
+  return VE.getTypeID(I8PtrTy);
+}
+
+unsigned ModuleBitcodeWriter50::getGlobalObjectValueTypeID(Type *T,
+                                                       const GlobalObject *G) {
+  auto It = PointerMap.find(G);
+  if (It != PointerMap.end()) {
+    TypedPointerType *PtrTy = cast<TypedPointerType>(It->second);
+    return VE.getTypeID(PtrTy->getElementType());
+  }
+  return VE.getTypeID(T);
+}
 
 static unsigned getEncodedCastOpcode(unsigned Opcode) {
   switch (Opcode) {
@@ -805,16 +856,32 @@ void ModuleBitcodeWriter50::writeTypeTable() {
       Code = bitc::TYPE_CODE_INTEGER;
       TypeVals.push_back(cast<IntegerType>(T)->getBitWidth());
       break;
+    case Type::TypedPointerTyID: {
+      TypedPointerType *PTy = cast<TypedPointerType>(T);
+      // POINTER: [pointee type, address space]
+      Code = bitc::TYPE_CODE_POINTER;
+      TypeVals.push_back(getTypeID(PTy->getElementType()));
+      unsigned AddressSpace = PTy->getAddressSpace();
+      TypeVals.push_back(AddressSpace);
+      if (AddressSpace == 0)
+        AbbrevToUse = PtrAbbrev;
+      break;
+    }
     case Type::PointerTyID: {
       PointerType *PTy = cast<PointerType>(T);
-      unsigned AddressSpace = PTy->getAddressSpace();
-      if (PTy->isOpaque()) {
-        // OPAQUE_POINTER: [address space]
-        llvm_unreachable("opaque pointers are not supported with LLVM 5.0");
+      // POINTER: [pointee type, address space]
+      Code = bitc::TYPE_CODE_POINTER;
+      // Emitting an empty struct type for the opaque pointer's type allows
+      // this to be order-independent. Non-struct types must be emitted in
+      // bitcode before they can be referenced.
+      if (PTy->isOpaquePointerTy()) {
+        TypeVals.push_back(false);
+        Code = bitc::TYPE_CODE_OPAQUE;
+        writeStringRecord(Stream, bitc::TYPE_CODE_STRUCT_NAME,
+                          "OpaquePtrReservedName", StructNameAbbrev);
       } else {
-        // POINTER: [pointee type, address space]
-        Code = bitc::TYPE_CODE_POINTER;
-        TypeVals.push_back(VE.getTypeID(PTy->getNonOpaquePointerElementType()));
+        TypeVals.push_back(getTypeID(PTy->getNonOpaquePointerElementType()));
+        unsigned AddressSpace = PTy->getAddressSpace();
         TypeVals.push_back(AddressSpace);
         if (AddressSpace == 0)
           AbbrevToUse = PtrAbbrev;
@@ -826,9 +893,9 @@ void ModuleBitcodeWriter50::writeTypeTable() {
       // FUNCTION: [isvararg, retty, paramty x N]
       Code = bitc::TYPE_CODE_FUNCTION;
       TypeVals.push_back(FT->isVarArg());
-      TypeVals.push_back(VE.getTypeID(FT->getReturnType()));
+      TypeVals.push_back(getTypeID(FT->getReturnType()));
       for (unsigned i = 0, e = FT->getNumParams(); i != e; ++i)
-        TypeVals.push_back(VE.getTypeID(FT->getParamType(i)));
+        TypeVals.push_back(getTypeID(FT->getParamType(i)));
       AbbrevToUse = FunctionAbbrev;
       break;
     }
@@ -838,7 +905,7 @@ void ModuleBitcodeWriter50::writeTypeTable() {
       TypeVals.push_back(ST->isPacked());
       // Output all of the element types.
       for (Type *ET : ST->elements())
-        TypeVals.push_back(VE.getTypeID(ET));
+        TypeVals.push_back(getTypeID(ET));
 
       if (ST->isLiteral()) {
         Code = bitc::TYPE_CODE_STRUCT_ANON;
@@ -863,7 +930,7 @@ void ModuleBitcodeWriter50::writeTypeTable() {
       // ARRAY: [numelts, eltty]
       Code = bitc::TYPE_CODE_ARRAY;
       TypeVals.push_back(AT->getNumElements());
-      TypeVals.push_back(VE.getTypeID(AT->getElementType()));
+      TypeVals.push_back(getTypeID(AT->getElementType()));
       AbbrevToUse = ArrayAbbrev;
       break;
     }
@@ -872,7 +939,7 @@ void ModuleBitcodeWriter50::writeTypeTable() {
       // VECTOR [numelts, eltty]
       Code = bitc::TYPE_CODE_VECTOR;
       TypeVals.push_back(VT->getNumElements());
-      TypeVals.push_back(VE.getTypeID(VT->getElementType()));
+      TypeVals.push_back(getTypeID(VT->getElementType()));
       break;
     }
     case Type::ScalableVectorTyID:
@@ -887,8 +954,6 @@ void ModuleBitcodeWriter50::writeTypeTable() {
     case Type::TargetExtTyID:
       llvm_unreachable("Target extension types are not supported with LLVM 5.0");
       break;
-    case Type::TypedPointerTyID:
-      llvm_unreachable("Typed pointers cannot be added to IR modules");
     }
 
     // Emit the finished record.
@@ -1087,7 +1152,10 @@ void ModuleBitcodeWriter50::writeModuleInfo() {
   };
   for (const GlobalVariable &GV : M.globals()) {
     UpdateMaxAlignment(GV.getAlign());
-    MaxGlobalType = std::max(MaxGlobalType, VE.getTypeID(GV.getValueType()));
+    // Use getGlobalObjectValueTypeID to look up the enumerated type ID for
+    // Global Variable types.
+    MaxGlobalType = std::max(
+        MaxGlobalType, getGlobalObjectValueTypeID(GV.getValueType(), &GV));
     if (GV.hasSection()) {
       // Give section names unique ID's.
       unsigned &Entry = SectionMap[std::string(GV.getSection())];
@@ -1186,7 +1254,7 @@ void ModuleBitcodeWriter50::writeModuleInfo() {
     //             comdat, attributes]
     Vals.push_back(addToStrtab(GV.getName()));
     Vals.push_back(GV.getName().size());
-    Vals.push_back(VE.getTypeID(GV.getValueType()));
+    Vals.push_back(getGlobalObjectValueTypeID(GV.getValueType(), &GV));
     Vals.push_back(GV.getType()->getAddressSpace() << 2 | 2 | GV.isConstant());
     Vals.push_back(GV.isDeclaration() ? 0 :
                    (VE.getValueID(GV.getInitializer()) + 1));
@@ -1226,7 +1294,7 @@ void ModuleBitcodeWriter50::writeModuleInfo() {
     //             prefixdata, personalityfn]
     Vals.push_back(addToStrtab(F.getName()));
     Vals.push_back(F.getName().size());
-    Vals.push_back(VE.getTypeID(F.getFunctionType()));
+    Vals.push_back(getGlobalObjectValueTypeID(F.getFunctionType(), &F));
     Vals.push_back(F.getCallingConv());
     Vals.push_back(F.isDeclaration());
     Vals.push_back(getEncodedLinkage(F));
@@ -1257,7 +1325,7 @@ void ModuleBitcodeWriter50::writeModuleInfo() {
     //         visibility, dllstorageclass, threadlocal, unnamed_addr]
     Vals.push_back(addToStrtab(A.getName()));
     Vals.push_back(A.getName().size());
-    Vals.push_back(VE.getTypeID(A.getValueType()));
+    Vals.push_back(getTypeID(A.getValueType(), &A));
     Vals.push_back(A.getType()->getAddressSpace());
     Vals.push_back(VE.getValueID(A.getAliasee()));
     Vals.push_back(getEncodedLinkage(A));
@@ -1276,7 +1344,7 @@ void ModuleBitcodeWriter50::writeModuleInfo() {
     //         val#, linkage, visibility]
     Vals.push_back(addToStrtab(I.getName()));
     Vals.push_back(I.getName().size());
-    Vals.push_back(VE.getTypeID(I.getValueType()));
+    Vals.push_back(getTypeID(I.getValueType()));
     Vals.push_back(I.getType()->getAddressSpace());
     Vals.push_back(VE.getValueID(I.getResolver()));
     Vals.push_back(getEncodedLinkage(I));
@@ -1321,7 +1389,12 @@ void ModuleBitcodeWriter50::writeValueAsMetadata(
     const ValueAsMetadata *MD, SmallVectorImpl<uint64_t> &Record) {
   // Mimic an MDNode with a value as one operand.
   Value *V = MD->getValue();
-  Record.push_back(VE.getTypeID(V->getType()));
+  Type *Ty = V->getType();
+  if (Function *F = dyn_cast<Function>(V))
+    Ty = TypedPointerType::get(F->getFunctionType(), F->getAddressSpace());
+  else if (GlobalVariable *GV = dyn_cast<GlobalVariable>(V))
+    Ty = TypedPointerType::get(GV->getValueType(), GV->getAddressSpace());
+  Record.push_back(getTypeID(Ty, V));
   Record.push_back(VE.getValueID(V));
   Stream.EmitRecord(bitc::METADATA_VALUE, Record, 0);
   Record.clear();
@@ -2055,6 +2128,14 @@ void ModuleBitcodeWriter50::writeFunctionMetadataAttachment(const Function &F) {
       MDs.clear();
       I.getAllMetadataOtherThanDebugLoc(MDs);
 
+      // get rid of the !ptr_type metadata
+      for (auto it = MDs.begin(); it != MDs.end(); ) {
+        if (it->first == F.getContext().getMDKindID("ptr_type"))
+          it = MDs.erase(it);
+        else
+          ++it;
+      }
+
       // If no metadata, ignore instruction.
       if (MDs.empty()) continue;
 
@@ -2195,7 +2276,7 @@ void ModuleBitcodeWriter50::writeConstants(unsigned FirstVal, unsigned LastVal,
     // If we need to switch types, do so now.
     if (V->getType() != LastTy) {
       LastTy = V->getType();
-      Record.push_back(VE.getTypeID(LastTy));
+      Record.push_back(getTypeID(LastTy, V));
       Stream.EmitRecord(bitc::CST_CODE_SETTYPE, Record,
                         CONSTANTS_SETTYPE_ABBREV);
       Record.clear();
@@ -2314,7 +2395,7 @@ void ModuleBitcodeWriter50::writeConstants(unsigned FirstVal, unsigned LastVal,
         if (Instruction::isCast(CE->getOpcode())) {
           Code = bitc::CST_CODE_CE_CAST;
           Record.push_back(getEncodedCastOpcode(CE->getOpcode()));
-          Record.push_back(VE.getTypeID(C->getOperand(0)->getType()));
+          Record.push_back(getTypeID(C->getOperand(0)->getType(), C->getOperand(0)));
           Record.push_back(VE.getValueID(C->getOperand(0)));
           AbbrevToUse = CONSTANTS_CE_CAST_Abbrev;
         } else {
@@ -2331,14 +2412,14 @@ void ModuleBitcodeWriter50::writeConstants(unsigned FirstVal, unsigned LastVal,
       case Instruction::GetElementPtr: {
         Code = bitc::CST_CODE_CE_GEP;
         const auto *GO = cast<GEPOperator>(C);
-        Record.push_back(VE.getTypeID(GO->getSourceElementType()));
+        Record.push_back(getTypeID(GO->getSourceElementType()));
         if (std::optional<unsigned> Idx = GO->getInRangeIndex()) {
           Code = bitc::CST_CODE_CE_GEP_WITH_INRANGE_INDEX;
           Record.push_back((*Idx << 1) | GO->isInBounds());
         } else if (GO->isInBounds())
           Code = bitc::CST_CODE_CE_INBOUNDS_GEP;
         for (unsigned i = 0, e = CE->getNumOperands(); i != e; ++i) {
-          Record.push_back(VE.getTypeID(C->getOperand(i)->getType()));
+          Record.push_back(getTypeID(C->getOperand(i)->getType(), C->getOperand(i)));
           Record.push_back(VE.getValueID(C->getOperand(i)));
         }
         break;
@@ -2351,16 +2432,16 @@ void ModuleBitcodeWriter50::writeConstants(unsigned FirstVal, unsigned LastVal,
         break;
       case Instruction::ExtractElement:
         Code = bitc::CST_CODE_CE_EXTRACTELT;
-        Record.push_back(VE.getTypeID(C->getOperand(0)->getType()));
+        Record.push_back(getTypeID(C->getOperand(0)->getType()));
         Record.push_back(VE.getValueID(C->getOperand(0)));
-        Record.push_back(VE.getTypeID(C->getOperand(1)->getType()));
+        Record.push_back(getTypeID(C->getOperand(1)->getType()));
         Record.push_back(VE.getValueID(C->getOperand(1)));
         break;
       case Instruction::InsertElement:
         Code = bitc::CST_CODE_CE_INSERTELT;
         Record.push_back(VE.getValueID(C->getOperand(0)));
         Record.push_back(VE.getValueID(C->getOperand(1)));
-        Record.push_back(VE.getTypeID(C->getOperand(2)->getType()));
+        Record.push_back(getTypeID(C->getOperand(2)->getType()));
         Record.push_back(VE.getValueID(C->getOperand(2)));
         break;
       case Instruction::ShuffleVector:
@@ -2372,7 +2453,7 @@ void ModuleBitcodeWriter50::writeConstants(unsigned FirstVal, unsigned LastVal,
           Code = bitc::CST_CODE_CE_SHUFFLEVEC;
         } else {
           Code = bitc::CST_CODE_CE_SHUFVEC_EX;
-          Record.push_back(VE.getTypeID(C->getOperand(0)->getType()));
+          Record.push_back(getTypeID(C->getOperand(0)->getType()));
         }
         Record.push_back(VE.getValueID(C->getOperand(0)));
         Record.push_back(VE.getValueID(C->getOperand(1)));
@@ -2381,7 +2462,7 @@ void ModuleBitcodeWriter50::writeConstants(unsigned FirstVal, unsigned LastVal,
       case Instruction::ICmp:
       case Instruction::FCmp:
         Code = bitc::CST_CODE_CE_CMP;
-        Record.push_back(VE.getTypeID(C->getOperand(0)->getType()));
+        Record.push_back(getTypeID(C->getOperand(0)->getType()));
         Record.push_back(VE.getValueID(C->getOperand(0)));
         Record.push_back(VE.getValueID(C->getOperand(1)));
         Record.push_back(CE->getPredicate());
@@ -2389,7 +2470,7 @@ void ModuleBitcodeWriter50::writeConstants(unsigned FirstVal, unsigned LastVal,
       }
     } else if (const BlockAddress *BA = dyn_cast<BlockAddress>(C)) {
       Code = bitc::CST_CODE_BLOCKADDRESS;
-      Record.push_back(VE.getTypeID(BA->getFunction()->getType()));
+      Record.push_back(getTypeID(BA->getFunction()->getType()));
       Record.push_back(VE.getValueID(BA->getFunction()));
       Record.push_back(VE.getGlobalBasicBlockID(BA->getBasicBlock()));
     } else {
@@ -2432,7 +2513,7 @@ bool ModuleBitcodeWriter50::pushValueAndType(const Value *V, unsigned InstID,
   // Make encoding relative to the InstID.
   Vals.push_back(InstID - ValID);
   if (ValID >= InstID) {
-    Vals.push_back(VE.getTypeID(V->getType()));
+    Vals.push_back(getTypeID(V->getType(), V));
     return true;
   }
   return false;
@@ -2483,7 +2564,7 @@ void ModuleBitcodeWriter50::writeInstruction(const Instruction &I,
       Code = bitc::FUNC_CODE_INST_CAST;
       if (!pushValueAndType(I.getOperand(0), InstID, Vals))
         AbbrevToUse = FUNCTION_INST_CAST_ABBREV;
-      Vals.push_back(VE.getTypeID(I.getType()));
+      Vals.push_back(getTypeID(I.getType(), &I));
       Vals.push_back(getEncodedCastOpcode(I.getOpcode()));
     } else {
       assert(isa<BinaryOperator>(I) && "Unknown instruction!");
@@ -2521,7 +2602,7 @@ void ModuleBitcodeWriter50::writeInstruction(const Instruction &I,
     AbbrevToUse = FUNCTION_INST_GEP_ABBREV;
     auto &GEPInst = cast<GetElementPtrInst>(I);
     Vals.push_back(GEPInst.isInBounds());
-    Vals.push_back(VE.getTypeID(GEPInst.getSourceElementType()));
+    Vals.push_back(getTypeID(GEPInst.getSourceElementType()));
     for (unsigned i = 0, e = I.getNumOperands(); i != e; ++i)
       pushValueAndType(I.getOperand(i), InstID, Vals);
     break;
@@ -2609,7 +2690,7 @@ void ModuleBitcodeWriter50::writeInstruction(const Instruction &I,
     {
       Code = bitc::FUNC_CODE_INST_SWITCH;
       const SwitchInst &SI = cast<SwitchInst>(I);
-      Vals.push_back(VE.getTypeID(SI.getCondition()->getType()));
+      Vals.push_back(getTypeID(SI.getCondition()->getType()));
       pushValue(SI.getCondition(), InstID, Vals);
       Vals.push_back(VE.getValueID(SI.getDefaultDest()));
       for (auto Case : SI.cases()) {
@@ -2620,7 +2701,7 @@ void ModuleBitcodeWriter50::writeInstruction(const Instruction &I,
     break;
   case Instruction::IndirectBr:
     Code = bitc::FUNC_CODE_INST_INDIRECTBR;
-    Vals.push_back(VE.getTypeID(I.getOperand(0)->getType()));
+    Vals.push_back(getTypeID(I.getOperand(0)->getType()));
     // Encode the address operand as relative, but not the basic blocks.
     pushValue(I.getOperand(0), InstID, Vals);
     for (unsigned i = 1, e = I.getNumOperands(); i != e; ++i)
@@ -2641,7 +2722,7 @@ void ModuleBitcodeWriter50::writeInstruction(const Instruction &I,
     Vals.push_back(II->getCallingConv() | 1 << 13);
     Vals.push_back(VE.getValueID(II->getNormalDest()));
     Vals.push_back(VE.getValueID(II->getUnwindDest()));
-    Vals.push_back(VE.getTypeID(FTy));
+    Vals.push_back(getTypeID(FTy));
     pushValueAndType(Callee, InstID, Vals);
 
     // Emit value #'s for the fixed parameters.
@@ -2714,7 +2795,7 @@ void ModuleBitcodeWriter50::writeInstruction(const Instruction &I,
     // negative valued IDs.  This is most common for PHIs, so we use
     // signed VBRs.
     SmallVector<uint64_t, 128> Vals64;
-    Vals64.push_back(VE.getTypeID(PN.getType()));
+    Vals64.push_back(getTypeID(PN.getType(), &PN));
     for (unsigned i = 0, e = PN.getNumIncomingValues(); i != e; ++i) {
       pushValueSigned(PN.getIncomingValue(i), InstID, Vals64);
       Vals64.push_back(VE.getValueID(PN.getIncomingBlock(i)));
@@ -2728,7 +2809,7 @@ void ModuleBitcodeWriter50::writeInstruction(const Instruction &I,
   case Instruction::LandingPad: {
     const LandingPadInst &LP = cast<LandingPadInst>(I);
     Code = bitc::FUNC_CODE_INST_LANDINGPAD;
-    Vals.push_back(VE.getTypeID(LP.getType()));
+    Vals.push_back(getTypeID(LP.getType()));
     Vals.push_back(LP.isCleanup());
     Vals.push_back(LP.getNumClauses());
     for (unsigned I = 0, E = LP.getNumClauses(); I != E; ++I) {
@@ -2744,8 +2825,8 @@ void ModuleBitcodeWriter50::writeInstruction(const Instruction &I,
   case Instruction::Alloca: {
     Code = bitc::FUNC_CODE_INST_ALLOCA;
     const AllocaInst &AI = cast<AllocaInst>(I);
-    Vals.push_back(VE.getTypeID(AI.getAllocatedType()));
-    Vals.push_back(VE.getTypeID(I.getOperand(0)->getType()));
+    Vals.push_back(getTypeID(AI.getAllocatedType()));
+    Vals.push_back(getTypeID(I.getOperand(0)->getType()));
     Vals.push_back(VE.getValueID(I.getOperand(0))); // size.
     unsigned AlignRecord = getEncodedAlign(AI.getAlign());
     AlignRecord |= AI.isUsedWithInAlloca() << 5;
@@ -2764,7 +2845,7 @@ void ModuleBitcodeWriter50::writeInstruction(const Instruction &I,
       if (!pushValueAndType(I.getOperand(0), InstID, Vals)) // ptr
         AbbrevToUse = FUNCTION_INST_LOAD_ABBREV;
     }
-    Vals.push_back(VE.getTypeID(I.getType()));
+    Vals.push_back(getTypeID(I.getType(), &I));
     Vals.push_back(getEncodedAlign(cast<LoadInst>(I).getAlign()));
     Vals.push_back(cast<LoadInst>(I).isVolatile());
     if (cast<LoadInst>(I).isAtomic()) {
@@ -2838,7 +2919,7 @@ void ModuleBitcodeWriter50::writeInstruction(const Instruction &I,
     if (Flags != 0)
       Vals.push_back(Flags);
 
-    Vals.push_back(VE.getTypeID(FTy));
+    Vals.push_back(getGlobalObjectValueTypeID(FTy, CI.getCalledFunction()));
     pushValueAndType(CI.getCalledOperand(), InstID, Vals); // Callee
 
     // Emit value #'s for the fixed parameters.
@@ -2859,9 +2940,9 @@ void ModuleBitcodeWriter50::writeInstruction(const Instruction &I,
   }
   case Instruction::VAArg:
     Code = bitc::FUNC_CODE_INST_VAARG;
-    Vals.push_back(VE.getTypeID(I.getOperand(0)->getType()));   // valistty
+    Vals.push_back(getTypeID(I.getOperand(0)->getType()));   // valistty
     pushValue(I.getOperand(0), InstID, Vals);                   // valist.
-    Vals.push_back(VE.getTypeID(I.getType())); // restype.
+    Vals.push_back(getTypeID(I.getType())); // restype.
     break;
   case Instruction::Freeze: {
     llvm_unreachable("can not encode freeze instruction for LLVM 5.0");
@@ -3523,8 +3604,9 @@ void ModuleBitcodeWriter50::writePerModuleGlobalValueSummary() {
 
   // Capture references from GlobalVariable initializers, which are outside
   // of a function scope.
-  for (const GlobalVariable &G : M.globals())
+  for (const GlobalVariable &G : M.globals()) {
     writeModuleLevelReferences(G, NameVals, FSModRefsAbbrev);
+  }
 
   for (const GlobalAlias &A : M.aliases()) {
     auto *Aliasee = A.getAliaseeObject();
@@ -3816,7 +3898,6 @@ void ModuleBitcodeWriter50::write() {
   writeTypeTable();
 
   writeComdats();
-
   // Emit top-level description of module, including target triple, inline asm,
   // descriptors for global variables, and function prototype info.
   writeModuleInfo();

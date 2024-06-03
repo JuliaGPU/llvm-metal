@@ -28,6 +28,7 @@ private:
     Module &M;
 
     bool removeFreeze();
+    bool convertPointers();
 };
 
 

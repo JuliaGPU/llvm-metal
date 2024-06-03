@@ -141,7 +141,7 @@ private:
   ValueEnumerator50(const ValueEnumerator50 &) = delete;
   void operator=(const ValueEnumerator50 &) = delete;
 public:
-  ValueEnumerator50(const Module &M, bool ShouldPreserveUseListOrder);
+  ValueEnumerator50(const Module &M, Type *PrefixType, bool ShouldPreserveUseListOrder);
 
   //! signals that an attribute group id is invalid / should not be used
   static constexpr const uint32_t invalid_attribute_group_id = 0x7FFF'FFFFu;
@@ -297,12 +297,14 @@ private:
   void EnumerateFunctionLocalMetadata(unsigned F, const LocalAsMetadata *Local);
   void EnumerateNamedMDNode(const NamedMDNode *NMD);
   void EnumerateValue(const Value *V);
-  void EnumerateType(Type *T);
   void EnumerateOperandType(const Value *V);
   void EnumerateAttributes(AttributeList PAL);
 
   void EnumerateValueSymbolTable(const ValueSymbolTable &ST);
   void EnumerateNamedMetadata(const Module &M);
+
+public:
+  void EnumerateType(Type *T);
 };
 
 } // End llvm namespace

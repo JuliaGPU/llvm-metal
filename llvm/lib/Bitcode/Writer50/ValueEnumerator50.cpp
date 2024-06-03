@@ -19,6 +19,7 @@
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/Module.h"
+#include "llvm/IR/TypedPointerType.h"
 #include "llvm/IR/UseListOrder.h"
 #include "llvm/IR/ValueSymbolTable.h"
 #include "llvm/Support/Debug.h"
@@ -287,9 +288,11 @@ static bool isIntOrIntVectorValue(const std::pair<const Value*, unsigned> &V) {
   return V.first->getType()->isIntOrIntVectorTy();
 }
 
-ValueEnumerator50::ValueEnumerator50(const Module &M,
+ValueEnumerator50::ValueEnumerator50(const Module &M, Type *PrefixType,
                                  bool ShouldPreserveUseListOrder)
     : ShouldPreserveUseListOrder(ShouldPreserveUseListOrder) {
+  EnumerateType(PrefixType);
+
   if (ShouldPreserveUseListOrder)
     UseListOrders = predictUseListOrder(M);
 
@@ -300,6 +303,9 @@ ValueEnumerator50::ValueEnumerator50(const Module &M,
   // Enumerate the functions.
   for (const Function & F : M) {
     EnumerateValue(&F);
+    EnumerateType(F.getValueType());
+    EnumerateType(
+        TypedPointerType::get(F.getFunctionType(), F.getAddressSpace()));
     EnumerateAttributes(F.getAttributes());
   }
 
@@ -318,6 +324,8 @@ ValueEnumerator50::ValueEnumerator50(const Module &M,
   for (const GlobalVariable &GV : M.globals()) {
     if (GV.hasInitializer())
       EnumerateValue(GV.getInitializer());
+    EnumerateType(
+        TypedPointerType::get(GV.getValueType(), GV.getAddressSpace()));
     if (GV.hasAttributes())
       EnumerateAttributes(GV.getAttributesAsList(AttributeList::FunctionIndex));
   }
@@ -383,17 +391,21 @@ ValueEnumerator50::ValueEnumerator50(const Module &M,
 
           EnumerateMetadata(&F, MD->getMetadata());
         }
+        if (auto *SVI = dyn_cast<ShuffleVectorInst>(&I))
+          EnumerateType(SVI->getShuffleMaskForBitcode()->getType());
+        if (auto *GEP = dyn_cast<GetElementPtrInst>(&I))
+          EnumerateType(GEP->getSourceElementType());
+        if (auto *AI = dyn_cast<AllocaInst>(&I))
+          EnumerateType(AI->getAllocatedType());
         EnumerateType(I.getType());
-        if (const CallInst *CI = dyn_cast<CallInst>(&I))
-          EnumerateAttributes(CI->getAttributes());
-        else if (const InvokeInst *II = dyn_cast<InvokeInst>(&I))
-          EnumerateAttributes(II->getAttributes());
-        else if (const UnaryOperator *UnOp = dyn_cast<UnaryOperator>(&I);
-                 UnOp && UnOp->getOpcode() == Instruction::FNeg) {
+        if (const auto *Call = dyn_cast<CallBase>(&I)) {
+          EnumerateAttributes(Call->getAttributes());
+          EnumerateType(Call->getFunctionType());
+        }
+        if (const UnaryOperator *UnOp = dyn_cast<UnaryOperator>(&I);
+           UnOp && UnOp->getOpcode() == Instruction::FNeg)
           // add -0.0 value that we'll use later
           EnumerateValue(ConstantFP::get(UnOp->getOperand(0)->getType(), -0.0));
-        } else if (auto *SVI = dyn_cast<ShuffleVectorInst>(&I))
-          EnumerateType(SVI->getShuffleMaskForBitcode()->getType());
 
         // Enumerate metadata attached with this instruction.
         MDs.clear();
@@ -864,12 +876,6 @@ void ValueEnumerator50::EnumerateType(Type *Ty) {
   // then emit the definition now that all of its contents are available.
   if (*TypeID && *TypeID != ~0U)
     return;
-
-  // Check to see if we're dealing with opaque pointers
-  auto *PTy = dyn_cast<PointerType>(Ty);
-  if (PTy && PTy->isOpaque()) {
-    llvm_unreachable("Opaque pointers are not supported in LLVM 5.0; please run with --opaque-pointers=0");
-  }
 
   // Add this type now that its contents are all happily enumerated.
   Types.push_back(Ty);
