@@ -12,7 +12,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "ValueEnumerator50.h"
-#include "ModuleRewriter50.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Config/llvm-config.h"
 #include "llvm/IR/Argument.h"

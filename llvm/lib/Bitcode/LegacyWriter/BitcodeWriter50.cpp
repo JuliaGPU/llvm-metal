@@ -13,7 +13,6 @@
 
 #include "llvm/Bitcode/BitcodeWriter.h"
 #include "ValueEnumerator50.h"
-#include "ModuleRewriter50.h"
 #include "PointerRewriter.h"
 #include "llvm/ADT/APFloat.h"
 #include "llvm/ADT/APInt.h"
@@ -72,7 +71,6 @@
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Support/SHA1.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/Transforms/Utils/Cloning.h"
 #include "llvm/TargetParser/Triple.h"
 #include <algorithm>
 #include <cassert>
@@ -4123,26 +4121,21 @@ void BitcodeWriter50::writeIndex(
 
 /// WriteBitcode50ToFile - Write the specified module to the specified output
 /// stream.
-void llvm::WriteBitcode50ToFile(const Module &_M, raw_ostream &Out,
+void llvm::WriteBitcode50ToFile(const Module &M, raw_ostream &Out,
                                 bool ShouldPreserveUseListOrder,
                                 const ModuleSummaryIndex *Index,
                                 bool GenerateHash, ModuleHash *ModHash) {
   SmallVector<char, 0> Buffer;
   Buffer.reserve(256*1024);
 
-  // Rewrite the module to make the IR compatible
-  auto M = CloneModule(_M);
-  ModuleRewriter50 MR(*M);
-  MR.run();
-
   // If this is darwin or another generic macho target, reserve space for the
   // header.
-  Triple TT(M->getTargetTriple());
+  Triple TT(M.getTargetTriple());
   if (TT.isOSDarwin() || TT.isOSBinFormatMachO())
     Buffer.insert(Buffer.begin(), BWH_HeaderSize, 0);
 
   BitcodeWriter50 Writer(Buffer);
-  Writer.writeModule(*M, ShouldPreserveUseListOrder, Index, GenerateHash,
+  Writer.writeModule(M, ShouldPreserveUseListOrder, Index, GenerateHash,
                      ModHash);
   Writer.writeSymtab();
   Writer.writeStrtab();

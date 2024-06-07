@@ -11,7 +11,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "ModuleRewriter70.h"
+#include "llvm/Bitcode/BitcodeWriter.h"
 #include "PointerRewriter.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Instructions.h"
@@ -61,7 +61,7 @@ static bool replaceFNeg(Module &M) {
   return true;
 }
 
-bool ModuleRewriter70::run() {
+bool BitcodeWriter70::prepareModule(Module &M) {
   bool Changed = removeFreeze(M);
   Changed |= replaceFNeg(M);
 

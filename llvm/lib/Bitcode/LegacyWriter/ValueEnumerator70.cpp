@@ -12,7 +12,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "ValueEnumerator70.h"
-#include "ModuleRewriter50.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/IR/Constants.h"
