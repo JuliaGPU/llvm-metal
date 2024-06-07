@@ -425,11 +425,7 @@ ValueEnumerator50::ValueEnumerator50(const Module &M,
           EnumerateAttributes(CI->getAttributes());
         else if (const InvokeInst *II = dyn_cast<InvokeInst>(&I))
           EnumerateAttributes(II->getAttributes());
-        else if (const UnaryOperator *UnOp = dyn_cast<UnaryOperator>(&I);
-                 UnOp && UnOp->getOpcode() == Instruction::FNeg) {
-          // add -0.0 value that we'll use later
-          EnumerateValue(ConstantFP::get(UnOp->getOperand(0)->getType(), -0.0));
-        } else if (auto *SVI = dyn_cast<ShuffleVectorInst>(&I))
+        else if (auto *SVI = dyn_cast<ShuffleVectorInst>(&I))
           EnumerateType(SVI->getShuffleMaskForBitcode()->getType());
 
         // Enumerate metadata attached with this instruction.
