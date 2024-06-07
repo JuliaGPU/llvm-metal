@@ -1,4 +1,4 @@
-//===-- Bitcode/Writer50/ModuleRewriter50.h - Rewrite IR -------*- C++ -*-===//
+//===-- Bitcode/LegacyWriter/ModuleRewriter50.h - Rewrite IR ----*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -11,8 +11,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_LIB_BITCODE_WRITER50_MODULEREWRITER50_H
-#define LLVM_LIB_BITCODE_WRITER50_MODULEREWRITER50_H
+#ifndef LLVM_LIB_BITCODE_LEGACYWRITER_MODULEREWRITER50_H
+#define LLVM_LIB_BITCODE_LEGACYWRITER_MODULEREWRITER50_H
 
 namespace llvm {
 

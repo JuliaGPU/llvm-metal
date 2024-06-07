@@ -14,6 +14,7 @@
 #include "llvm/Bitcode/BitcodeWriter.h"
 #include "ValueEnumerator70.h"
 #include "ModuleRewriter70.h"
+#include "PointerRewriter.h"
 #include "llvm/ADT/APFloat.h"
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/ArrayRef.h"
@@ -54,6 +55,7 @@
 #include "llvm/IR/Module.h"
 #include "llvm/IR/ModuleSummaryIndex.h"
 #include "llvm/IR/Operator.h"
+#include "llvm/IR/TypedPointerType.h"
 #include "llvm/IR/Type.h"
 #include "llvm/IR/UseListOrder.h"
 #include "llvm/IR/Value.h"
@@ -170,6 +172,8 @@ protected:
   /// backpatched with the offset of the actual VST.
   uint64_t VSTOffsetPlaceholder = 0;
 
+  PointerTypeMap PointerMap;
+
 public:
   /// Constructs a ModuleBitcodeWriterBase70 object for the given Module,
   /// writing to the provided \p Buffer.
@@ -179,6 +183,13 @@ public:
                           const ModuleSummaryIndex *Index)
       : BitcodeWriterBase70(Stream, StrtabBuilder), M(M),
         VE(M, ShouldPreserveUseListOrder), Index(Index) {
+    // Enumerate typed pointers
+    if (!M.getContext().supportsTypedPointers()) {
+      PointerMap = PointerRewriter::buildPointerMap(M);
+      for (auto El : PointerMap)
+        VE.EnumerateType(El.second);
+    }
+
     // Assign ValueIds to any callee values in the index that came from
     // indirect call profiles and were recorded as a GUID not a Value*
     // (which would have been assigned an ID by the ValueEnumerator70).
@@ -367,7 +378,8 @@ private:
   void writeConstants(unsigned FirstVal, unsigned LastVal, bool isGlobal);
   void writeModuleConstants();
   bool pushValueAndType(const Value *V, unsigned InstID,
-                        SmallVectorImpl<unsigned> &Vals);
+                        SmallVectorImpl<unsigned> &Vals,
+                        Type *Ty = nullptr);
   void writeOperandBundles(const CallBase &CB, unsigned InstID);
   void pushValue(const Value *V, unsigned InstID,
                  SmallVectorImpl<unsigned> &Vals);
@@ -868,18 +880,31 @@ void ModuleBitcodeWriter70::writeTypeTable() {
       break;
     case Type::PointerTyID: {
       PointerType *PTy = cast<PointerType>(T);
+      // POINTER: [pointee type, address space]
       unsigned AddressSpace = PTy->getAddressSpace();
+      Code = bitc::TYPE_CODE_POINTER;
       if (PTy->isOpaque()) {
-        // OPAQUE_POINTER: [address space]
-        llvm_unreachable("opaque pointers are not supported with LLVM 7.0");
+        // opaque pointers are unsupported, so emit using an opaque element type
+        auto ET = StructType::get(PTy->getContext());
+        TypeVals.push_back(VE.getTypeID(ET));
       } else {
-        // POINTER: [pointee type, address space]
         Code = bitc::TYPE_CODE_POINTER;
         TypeVals.push_back(VE.getTypeID(PTy->getNonOpaquePointerElementType()));
-        TypeVals.push_back(AddressSpace);
-        if (AddressSpace == 0)
-          AbbrevToUse = PtrAbbrev;
       }
+      TypeVals.push_back(AddressSpace);
+      if (AddressSpace == 0)
+        AbbrevToUse = PtrAbbrev;
+      break;
+    }
+    case Type::TypedPointerTyID: {
+      TypedPointerType *PTy = cast<TypedPointerType>(T);
+      unsigned AddressSpace = PTy->getAddressSpace();
+      // POINTER: [pointee type, address space]
+      Code = bitc::TYPE_CODE_POINTER;
+      TypeVals.push_back(VE.getTypeID(PTy->getElementType()));
+      TypeVals.push_back(AddressSpace);
+      if (AddressSpace == 0)
+        AbbrevToUse = PtrAbbrev;
       break;
     }
     case Type::FunctionTyID: {
@@ -948,8 +973,6 @@ void ModuleBitcodeWriter70::writeTypeTable() {
     case Type::TargetExtTyID:
       llvm_unreachable("Target extension types are not supported with LLVM 7.0");
       break;
-    case Type::TypedPointerTyID:
-      llvm_unreachable("Typed pointers cannot be added to IR modules");
     }
 
     // Emit the finished record.
@@ -1301,7 +1324,10 @@ void ModuleBitcodeWriter70::writeModuleInfo() {
     //             prefixdata, personalityfn, DSO_Local]
     Vals.push_back(addToStrtab(F.getName()));
     Vals.push_back(F.getName().size());
-    Vals.push_back(VE.getTypeID(F.getFunctionType()));
+    Type *FTy = F.getFunctionType();
+    if (auto Ty = PointerMap.lookup(&F))
+      FTy = cast<FunctionType>(Ty->getElementType());
+    Vals.push_back(VE.getTypeID(FTy));
     Vals.push_back(F.getCallingConv());
     Vals.push_back(F.isDeclaration());
     Vals.push_back(getEncodedLinkage(F));
@@ -1403,7 +1429,12 @@ void ModuleBitcodeWriter70::writeValueAsMetadata(
     const ValueAsMetadata *MD, SmallVectorImpl<uint64_t> &Record) {
   // Mimic an MDNode with a value as one operand.
   Value *V = MD->getValue();
-  Record.push_back(VE.getTypeID(V->getType()));
+  Type *Ty = V->getType();
+  if (Function *F = dyn_cast<Function>(V))
+    Ty = TypedPointerType::get(F->getFunctionType(), F->getAddressSpace());
+  else if (GlobalVariable *GV = dyn_cast<GlobalVariable>(V))
+    Ty = TypedPointerType::get(GV->getValueType(), GV->getAddressSpace());
+  Record.push_back(VE.getTypeID(Ty));
   Record.push_back(VE.getValueID(V));
   Stream.EmitRecord(bitc::METADATA_VALUE, Record, 0);
   Record.clear();
@@ -2516,12 +2547,15 @@ void ModuleBitcodeWriter70::writeModuleConstants() {
 /// instruction ID, then it is a forward reference, and it also includes the
 /// type ID.  The value ID that is written is encoded relative to the InstID.
 bool ModuleBitcodeWriter70::pushValueAndType(const Value *V, unsigned InstID,
-                                           SmallVectorImpl<unsigned> &Vals) {
+                                           SmallVectorImpl<unsigned> &Vals,
+                                           Type *Ty) {
   unsigned ValID = VE.getValueID(V);
   // Make encoding relative to the InstID.
   Vals.push_back(InstID - ValID);
   if (ValID >= InstID) {
-    Vals.push_back(VE.getTypeID(V->getType()));
+    if (!Ty)
+      Ty = V->getType();
+    Vals.push_back(VE.getTypeID(Ty));
     return true;
   }
   return false;
@@ -2570,9 +2604,15 @@ void ModuleBitcodeWriter70::writeInstruction(const Instruction &I,
   default:
     if (Instruction::isCast(I.getOpcode())) {
       Code = bitc::FUNC_CODE_INST_CAST;
-      if (!pushValueAndType(I.getOperand(0), InstID, Vals))
+      Type *OpTy = I.getOperand(0)->getType();
+      if (PointerMap.find(I.getOperand(0)) != PointerMap.end())
+        OpTy = PointerMap[I.getOperand(0)];
+      if (!pushValueAndType(I.getOperand(0), InstID, Vals, OpTy))
         AbbrevToUse = FUNCTION_INST_CAST_ABBREV;
-      Vals.push_back(VE.getTypeID(I.getType()));
+      Type *Ty = I.getType();
+      if (PointerMap.find(&I) != PointerMap.end())
+        Ty = PointerMap[&I];
+      Vals.push_back(VE.getTypeID(Ty));
       Vals.push_back(getEncodedCastOpcode(I.getOpcode()));
     } else {
       assert(isa<BinaryOperator>(I) && "Unknown instruction!");
@@ -2895,6 +2935,13 @@ void ModuleBitcodeWriter70::writeInstruction(const Instruction &I,
   case Instruction::Call: {
     const CallInst &CI = cast<CallInst>(I);
     FunctionType *FTy = CI.getFunctionType();
+
+    // Rewrite function types to match incoming arguments
+    if (CI.getCalledFunction()) {
+      auto F = CI.getCalledFunction();
+      if (auto Ty = PointerMap.lookup(F))
+        FTy = cast<FunctionType>(Ty->getElementType());
+    }
 
     if (CI.hasOperandBundles())
       writeOperandBundles(CI, InstID);

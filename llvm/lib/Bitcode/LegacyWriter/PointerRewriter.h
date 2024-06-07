@@ -1,4 +1,4 @@
-//===-- Bitcode/Writer50/PointerRewriter.h - Rewrite pointers ----*- C++ -*-===//
+//===-- Bitcode/LegacyWriter/PointerRewriter.h - Rewrite pointers -*- C++ -*-=//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -11,8 +11,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_LIB_BITCODE_WRITER50_POINTERREWRITER_H
-#define LLVM_LIB_BITCODE_WRITER50_POINTERREWRITER_H
+#ifndef LLVM_LIB_BITCODE_LEGACYWRITER_POINTERREWRITER_H
+#define LLVM_LIB_BITCODE_LEGACYWRITER_POINTERREWRITER_H
 
 #include "llvm/ADT/DenseMap.h"
 

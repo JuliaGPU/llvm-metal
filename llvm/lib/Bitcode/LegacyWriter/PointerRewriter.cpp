@@ -49,7 +49,7 @@ using namespace llvm;
 
 // Demote all constant expressions that produce pointers, to their
 // corresponding instructions so that we can more easily rewrite them.
-bool demotePointerConstexprs(Module &M) {
+static bool demotePointerConstexprs(Module &M) {
   SmallVector<std::pair<Instruction *, int>, 8> Worklist;
   for (Function &F : M)
     for (BasicBlock &BB : F)

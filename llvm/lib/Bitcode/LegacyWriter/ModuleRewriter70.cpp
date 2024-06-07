@@ -12,15 +12,12 @@
 //===----------------------------------------------------------------------===//
 
 #include "ModuleRewriter70.h"
+#include "PointerRewriter.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/Module.h"
 using namespace llvm;
 
-void ModuleRewriter70::run() {
-  removeFreeze();
-}
-
-bool ModuleRewriter70::removeFreeze() {
+static bool removeFreeze(Module &M) {
     // Find freeze instructions
     SmallVector<FreezeInst *, 8> Worklist;
     for (Function &F : M) {
@@ -41,4 +38,13 @@ bool ModuleRewriter70::removeFreeze() {
         FI->eraseFromParent();
     }
     return true;
+}
+
+bool ModuleRewriter70::run() {
+  bool Changed = removeFreeze(M);
+
+  PointerRewriter PR(M);
+  Changed |= PR.run();
+
+  return Changed;
 }
