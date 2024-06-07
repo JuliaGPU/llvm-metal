@@ -811,12 +811,18 @@ void ModuleBitcodeWriter50::writeTypeTable() {
       break;
     case Type::PointerTyID: {
       PointerType *PTy = cast<PointerType>(T);
-      // POINTER: [pointee type, address space]
-      Code = bitc::TYPE_CODE_POINTER;
-      TypeVals.push_back(VE.getTypeID(PTy->getElementType()));
       unsigned AddressSpace = PTy->getAddressSpace();
-      TypeVals.push_back(AddressSpace);
-      if (AddressSpace == 0) AbbrevToUse = PtrAbbrev;
+      if (PTy->isOpaque()) {
+        // OPAQUE_POINTER: [address space]
+        llvm_unreachable("opaque pointers are not supported with LLVM 7.0");
+      } else {
+        // POINTER: [pointee type, address space]
+        Code = bitc::TYPE_CODE_POINTER;
+        TypeVals.push_back(VE.getTypeID(PTy->getNonOpaquePointerElementType()));
+        TypeVals.push_back(AddressSpace);
+        if (AddressSpace == 0)
+          AbbrevToUse = PtrAbbrev;
+      }
       break;
     }
     case Type::FunctionTyID: {
