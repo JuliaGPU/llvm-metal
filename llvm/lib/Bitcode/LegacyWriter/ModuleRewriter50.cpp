@@ -17,7 +17,7 @@
 #include "llvm/IR/Module.h"
 using namespace llvm;
 
-bool removeFreeze(Module &M) {
+static bool removeFreeze(Module &M) {
     // Find freeze instructions
     SmallVector<FreezeInst *, 8> Worklist;
     for (Function &F : M) {

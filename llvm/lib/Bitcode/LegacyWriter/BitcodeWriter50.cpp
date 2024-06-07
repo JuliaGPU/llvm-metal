@@ -819,25 +819,20 @@ void ModuleBitcodeWriter50::writeTypeTable() {
       break;
     case Type::PointerTyID: {
       PointerType *PTy = cast<PointerType>(T);
+      // POINTER: [pointee type, address space]
       unsigned AddressSpace = PTy->getAddressSpace();
+      Code = bitc::TYPE_CODE_POINTER;
       if (PTy->isOpaque()) {
-        // OPAQUE_POINTER: [address space]
-        // unsupported, so emit as
-        // POINTER: [opaque element type, address space]
-        Code = bitc::TYPE_CODE_POINTER;
+        // opaque pointers are unsupported, so emit using an opaque element type
         auto ET = StructType::get(PTy->getContext());
         TypeVals.push_back(VE.getTypeID(ET));
-        TypeVals.push_back(AddressSpace);
-        if (AddressSpace == 0)
-          AbbrevToUse = PtrAbbrev;
       } else {
-        // POINTER: [pointee type, address space]
         Code = bitc::TYPE_CODE_POINTER;
         TypeVals.push_back(VE.getTypeID(PTy->getNonOpaquePointerElementType()));
-        TypeVals.push_back(AddressSpace);
-        if (AddressSpace == 0)
-          AbbrevToUse = PtrAbbrev;
       }
+      TypeVals.push_back(AddressSpace);
+      if (AddressSpace == 0)
+        AbbrevToUse = PtrAbbrev;
       break;
     }
     case Type::TypedPointerTyID: {

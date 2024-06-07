@@ -1,4 +1,4 @@
-//===-- Bitcode/Writer70/ModuleRewriter70.h - Rewrite IR -------*- C++ -*-===//
+//===-- Bitcode/LegacyWriter/ModuleRewriter70.h - Rewrite IR ----*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -11,8 +11,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_LIB_BITCODE_WRITER70_MODULEREWRITER70_H
-#define LLVM_LIB_BITCODE_WRITER70_MODULEREWRITER70_H
+#ifndef LLVM_LIB_BITCODE_LEGACYWRITER_MODULEREWRITER70_H
+#define LLVM_LIB_BITCODE_LEGACYWRITER_MODULEREWRITER70_H
 
 namespace llvm {
 
@@ -22,12 +22,10 @@ class ModuleRewriter70 {
 public:
   ModuleRewriter70(Module &M) : M(M) {}
 
-  void run();
+  bool run();
 
 private:
-    Module &M;
-
-    bool removeFreeze();
+  Module &M;
 };
 
 
