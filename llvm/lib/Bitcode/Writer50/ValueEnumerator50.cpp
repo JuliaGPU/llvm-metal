@@ -12,6 +12,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "ValueEnumerator50.h"
+#include "ModuleRewriter50.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/IR/Constants.h"
@@ -292,6 +293,13 @@ ValueEnumerator50::ValueEnumerator50(const Module &M,
     : ShouldPreserveUseListOrder(ShouldPreserveUseListOrder) {
   if (ShouldPreserveUseListOrder)
     UseListOrders = predictUseListOrder(M);
+
+  // Special types are needed when the context is opaque
+  if (!M.getContext().supportsTypedPointers()) {
+    // We'll encode pointers as {}*, so ensure the opaque type is available
+    Type *OpaquePtrTy = StructType::get(M.getContext());
+    EnumerateType(OpaquePtrTy);
+  }
 
   // Enumerate the global variables.
   for (const GlobalVariable &GV : M.globals())
