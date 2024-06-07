@@ -1348,10 +1348,12 @@ void ModuleBitcodeWriter50::writeValueAsMetadata(
   // Mimic an MDNode with a value as one operand.
   Value *V = MD->getValue();
   Type *Ty = V->getType();
-  if (Function *F = dyn_cast<Function>(V))
-    Ty = TypedPointerType::get(F->getFunctionType(), F->getAddressSpace());
-  else if (GlobalVariable *GV = dyn_cast<GlobalVariable>(V))
-    Ty = TypedPointerType::get(GV->getValueType(), GV->getAddressSpace());
+  if (!M.getContext().supportsTypedPointers()) {
+    if (Function *F = dyn_cast<Function>(V))
+      Ty = TypedPointerType::get(F->getFunctionType(), F->getAddressSpace());
+    else if (GlobalVariable *GV = dyn_cast<GlobalVariable>(V))
+      Ty = TypedPointerType::get(GV->getValueType(), GV->getAddressSpace());
+  }
   Record.push_back(VE.getTypeID(Ty));
   Record.push_back(VE.getValueID(V));
   Stream.EmitRecord(bitc::METADATA_VALUE, Record, 0);
