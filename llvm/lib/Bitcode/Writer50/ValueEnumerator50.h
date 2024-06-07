@@ -297,12 +297,14 @@ private:
   void EnumerateFunctionLocalMetadata(unsigned F, const LocalAsMetadata *Local);
   void EnumerateNamedMDNode(const NamedMDNode *NMD);
   void EnumerateValue(const Value *V);
-  void EnumerateType(Type *T);
   void EnumerateOperandType(const Value *V);
   void EnumerateAttributes(AttributeList PAL);
 
   void EnumerateValueSymbolTable(const ValueSymbolTable &ST);
   void EnumerateNamedMetadata(const Module &M);
+
+public:
+  void EnumerateType(Type *T);
 };
 
 } // End llvm namespace
