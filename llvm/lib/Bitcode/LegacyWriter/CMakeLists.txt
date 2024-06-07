@@ -20,5 +20,4 @@ add_llvm_component_library(LLVMLegacyBitWriter
   MC
   Object
   Support
-  TransformUtils
   )
