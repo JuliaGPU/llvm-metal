@@ -22,12 +22,10 @@ class ModuleRewriter70 {
 public:
   ModuleRewriter70(Module &M) : M(M) {}
 
-  void run();
+  bool run();
 
 private:
-    Module &M;
-
-    bool removeFreeze();
+  Module &M;
 };
 
 
