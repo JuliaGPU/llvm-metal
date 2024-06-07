@@ -1,4 +1,4 @@
-//===-- Bitcode/Writer50/ModuleRewriter50.h - Rewrite IR -------*- C++ -*-===//
+//===-- Bitcode/LegacyWriter/ModuleRewriter70.h - Rewrite IR ----*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -7,20 +7,20 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This class rewrites module contents to make them compatible with LLVM 5.0.
+// This class rewrites module contents to make them compatible with LLVM 7.0.
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_LIB_BITCODE_WRITER50_MODULEREWRITER50_H
-#define LLVM_LIB_BITCODE_WRITER50_MODULEREWRITER50_H
+#ifndef LLVM_LIB_BITCODE_LEGACYWRITER_MODULEREWRITER70_H
+#define LLVM_LIB_BITCODE_LEGACYWRITER_MODULEREWRITER70_H
 
 namespace llvm {
 
 class Module;
 
-class ModuleRewriter50 {
+class ModuleRewriter70 {
 public:
-  ModuleRewriter50(Module &M) : M(M) {}
+  ModuleRewriter70(Module &M) : M(M) {}
 
   void run();
 
