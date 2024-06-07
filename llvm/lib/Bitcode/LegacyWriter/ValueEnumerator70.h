@@ -1,4 +1,4 @@
-//===- Bitcode/Writer70/ValueEnumerator70.h - Number values ----*- C++ -*-===//
+//===- Bitcode/LegacyWriter/ValueEnumerator70.h - Number values -*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -11,8 +11,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_LIB_BITCODE_WRITER70_VALUEENUMERATOR70_H
-#define LLVM_LIB_BITCODE_WRITER70_VALUEENUMERATOR70_H
+#ifndef LLVM_LIB_BITCODE_LEGACYWRITER_VALUEENUMERATOR70_H
+#define LLVM_LIB_BITCODE_LEGACYWRITER_VALUEENUMERATOR70_H
 
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DenseMap.h"

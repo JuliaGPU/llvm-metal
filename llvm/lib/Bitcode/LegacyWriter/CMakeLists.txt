@@ -1,4 +1,9 @@
-add_llvm_library(LLVMBitWriter70
+add_llvm_component_library(LLVMLegacyBitWriter
+  BitWriter50.cpp
+  BitcodeWriter50.cpp
+  BitcodeWriterPass50.cpp
+  ValueEnumerator50.cpp
+  ModuleRewriter50.cpp
   BitWriter70.cpp
   BitcodeWriter70.cpp
   BitcodeWriterPass70.cpp

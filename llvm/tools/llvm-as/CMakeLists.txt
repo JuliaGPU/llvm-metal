@@ -1,8 +1,7 @@
 set(LLVM_LINK_COMPONENTS
   AsmParser
   BitWriter
-  BitWriter50
-  BitWriter70
+  LegacyBitWriter
   Core
   Support
   )
