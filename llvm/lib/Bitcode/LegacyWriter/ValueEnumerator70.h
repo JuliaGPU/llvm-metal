@@ -1,4 +1,4 @@
-//===- Bitcode/Writer70/ValueEnumerator70.h - Number values ----*- C++ -*-===//
+//===- Bitcode/LegacyWriter/ValueEnumerator70.h - Number values -*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -11,8 +11,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_LIB_BITCODE_WRITER70_VALUEENUMERATOR70_H
-#define LLVM_LIB_BITCODE_WRITER70_VALUEENUMERATOR70_H
+#ifndef LLVM_LIB_BITCODE_LEGACYWRITER_VALUEENUMERATOR70_H
+#define LLVM_LIB_BITCODE_LEGACYWRITER_VALUEENUMERATOR70_H
 
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DenseMap.h"
@@ -289,12 +289,14 @@ private:
   void EnumerateFunctionLocalMetadata(unsigned F, const LocalAsMetadata *Local);
   void EnumerateNamedMDNode(const NamedMDNode *NMD);
   void EnumerateValue(const Value *V);
-  void EnumerateType(Type *T);
   void EnumerateOperandType(const Value *V);
   void EnumerateAttributes(AttributeList PAL);
 
   void EnumerateValueSymbolTable(const ValueSymbolTable &ST);
   void EnumerateNamedMetadata(const Module &M);
+
+public:
+  void EnumerateType(Type *T);
 };
 
 } // End llvm namespace

@@ -1,4 +1,4 @@
-//===-- Bitcode/Writer50/ValueEnumerator50.h - Number values ----*- C++ -*-===//
+//===-- Bitcode/LegacyWriter/ValueEnumerator50.h - Number values -*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -11,8 +11,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_LIB_BITCODE_WRITER50_VALUEENUMERATOR50_H
-#define LLVM_LIB_BITCODE_WRITER50_VALUEENUMERATOR50_H
+#ifndef LLVM_LIB_BITCODE_LEGACYWRITER_VALUEENUMERATOR50_H
+#define LLVM_LIB_BITCODE_LEGACYWRITER_VALUEENUMERATOR50_H
 
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/UniqueVector.h"
