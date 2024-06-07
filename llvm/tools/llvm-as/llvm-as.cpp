@@ -73,7 +73,7 @@ static cl::opt<std::string> BitcodeVersion("bitcode-version",
                                            cl::value_desc("version-string"),
                                            cl::init(""), cl::cat(AsCat));
 
-static void WriteOutputFile(const Module *M, const ModuleSummaryIndex *Index) {
+static void WriteOutputFile(Module *M, const ModuleSummaryIndex *Index) {
   // Infer the output filename if needed.
   if (OutputFilename.empty()) {
     if (InputFilename == "-") {
@@ -109,13 +109,15 @@ static void WriteOutputFile(const Module *M, const ModuleSummaryIndex *Index) {
       if (BitcodeVersion.empty())
         WriteBitcodeToFile(*M, Out->os(), PreserveBitcodeUseListOrder,
                            IndexToWrite, EmitModuleHash);
-      else if (BitcodeVersion == "5.0")
+      else if (BitcodeVersion == "5.0") {
+        BitcodeWriter50::prepareModule(*M);
         WriteBitcode50ToFile(*M, Out->os(), PreserveBitcodeUseListOrder,
                              IndexToWrite, EmitModuleHash);
-      else if (BitcodeVersion == "7.0")
+      } else if (BitcodeVersion == "7.0") {
+        BitcodeWriter70::prepareModule(*M);
         WriteBitcode70ToFile(*M, Out->os(), PreserveBitcodeUseListOrder,
                              IndexToWrite, EmitModuleHash);
-      else
+      } else
         report_fatal_error("Unsupported bitcode version");
     else
       // Otherwise, with an empty Module but non-empty Index, we write a
