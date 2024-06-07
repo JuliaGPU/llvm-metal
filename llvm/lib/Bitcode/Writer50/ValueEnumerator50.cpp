@@ -12,6 +12,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "ValueEnumerator50.h"
+#include "ModuleRewriter50.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/IR/Constants.h"
@@ -292,6 +293,13 @@ ValueEnumerator50::ValueEnumerator50(const Module &M,
     : ShouldPreserveUseListOrder(ShouldPreserveUseListOrder) {
   if (ShouldPreserveUseListOrder)
     UseListOrders = predictUseListOrder(M);
+
+  // Special types are needed when the context is opaque
+  if (!M.getContext().supportsTypedPointers()) {
+    // We'll encode pointers as {}*, so ensure the opaque type is available
+    Type *OpaquePtrTy = StructType::get(M.getContext());
+    EnumerateType(OpaquePtrTy);
+  }
 
   // Enumerate the global variables.
   for (const GlobalVariable &GV : M.globals())
@@ -864,12 +872,6 @@ void ValueEnumerator50::EnumerateType(Type *Ty) {
   // then emit the definition now that all of its contents are available.
   if (*TypeID && *TypeID != ~0U)
     return;
-
-  // Check to see if we're dealing with opaque pointers
-  auto *PTy = dyn_cast<PointerType>(Ty);
-  if (PTy && PTy->isOpaque()) {
-    llvm_unreachable("Opaque pointers are not supported in LLVM 5.0; please run with --opaque-pointers=0");
-  }
 
   // Add this type now that its contents are all happily enumerated.
   Types.push_back(Ty);

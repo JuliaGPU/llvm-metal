@@ -4,6 +4,7 @@ add_llvm_component_library(LLVMBitWriter50
   BitcodeWriterPass50.cpp
   ValueEnumerator50.cpp
   ModuleRewriter50.cpp
+  PointerRewriter.cpp
 
   DEPENDS
   intrinsics_gen
