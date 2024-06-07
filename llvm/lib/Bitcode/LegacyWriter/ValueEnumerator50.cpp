@@ -316,12 +316,9 @@ ValueEnumerator50::ValueEnumerator50(const Module &M,
   if (ShouldPreserveUseListOrder)
     UseListOrders = predictUseListOrder(M);
 
-  // Special types are needed when the context is opaque
-  if (!M.getContext().supportsTypedPointers()) {
-    // We'll encode pointers as {}*, so ensure the opaque type is available
-    Type *OpaquePtrTy = StructType::get(M.getContext());
-    EnumerateType(OpaquePtrTy);
-  }
+  // We'll encode pointers as {}*, so ensure the opaque type is available
+  Type *OpaquePtrTy = StructType::get(M.getContext());
+  EnumerateType(OpaquePtrTy);
 
   // Enumerate the global variables.
   for (const GlobalVariable &GV : M.globals()) {

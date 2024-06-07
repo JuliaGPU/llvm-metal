@@ -295,9 +295,6 @@ PointerTypeMap PointerRewriter::buildPointerMap(const Module &M) {
 }
 
 bool PointerRewriter::run() {
-  if (M.getContext().supportsTypedPointers())
-    return false;
-
   // get rid of constant expressions so that we can more easily rewrite them
   bool Changed = demotePointerConstexprs(M);
 

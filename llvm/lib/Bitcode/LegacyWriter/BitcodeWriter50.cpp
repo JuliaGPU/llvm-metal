@@ -197,11 +197,9 @@ public:
         BitcodeStartBit(Stream.GetCurrentBitNo()) {
 
     // Enumerate typed pointers
-    if (!M.getContext().supportsTypedPointers()) {
-      PointerMap = PointerRewriter::buildPointerMap(M);
-      for (auto El : PointerMap)
-        VE.EnumerateType(El.second);
-    }
+    PointerMap = PointerRewriter::buildPointerMap(M);
+    for (auto El : PointerMap)
+      VE.EnumerateType(El.second);
 
     // imitate Metal by having one llvm.dbg.cu entry per DISubprogram
     if (auto dbg_cu = M.getNamedMetadata("llvm.dbg.cu"); dbg_cu) {
@@ -815,15 +813,6 @@ void ModuleBitcodeWriter50::writeTypeTable() {
   Abbv->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::Char6));
   unsigned StructNameAbbrev = Stream.EmitAbbrev(std::move(Abbv));
 
-  // Abbrev for TYPE_CODE_STRUCT_NAMED.
-  Abbv = std::make_shared<BitCodeAbbrev>();
-  Abbv->Add(BitCodeAbbrevOp(bitc::TYPE_CODE_STRUCT_NAMED));
-  Abbv->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::Fixed, 1));  // ispacked
-  Abbv->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::Array));
-  Abbv->Add(BitCodeAbbrevOp(BitCodeAbbrevOp::Fixed, NumBits));
-
-  unsigned StructNamedAbbrev = Stream.EmitAbbrev(std::move(Abbv));
-
   // Abbrev for TYPE_CODE_ARRAY.
   Abbv = std::make_shared<BitCodeAbbrev>();
   Abbv->Add(BitCodeAbbrevOp(bitc::TYPE_CODE_ARRAY));
@@ -865,14 +854,9 @@ void ModuleBitcodeWriter50::writeTypeTable() {
       // POINTER: [pointee type, address space]
       unsigned AddressSpace = PTy->getAddressSpace();
       Code = bitc::TYPE_CODE_POINTER;
-      if (PTy->isOpaque()) {
-        // opaque pointers are unsupported, so emit using an opaque element type
-        auto ET = StructType::get(PTy->getContext());
-        TypeVals.push_back(VE.getTypeID(ET));
-      } else {
-        Code = bitc::TYPE_CODE_POINTER;
-        TypeVals.push_back(VE.getTypeID(PTy->getNonOpaquePointerElementType()));
-      }
+      // opaque pointers are unsupported, so emit using an opaque element type
+      auto ET = StructType::get(PTy->getContext());
+      TypeVals.push_back(VE.getTypeID(ET));
       TypeVals.push_back(AddressSpace);
       if (AddressSpace == 0)
         AbbrevToUse = PtrAbbrev;
@@ -912,12 +896,7 @@ void ModuleBitcodeWriter50::writeTypeTable() {
         Code = bitc::TYPE_CODE_STRUCT_ANON;
         AbbrevToUse = StructAnonAbbrev;
       } else {
-        if (ST->isOpaque()) {
-          Code = bitc::TYPE_CODE_OPAQUE;
-        } else {
-          Code = bitc::TYPE_CODE_STRUCT_NAMED;
-          AbbrevToUse = StructNamedAbbrev;
-        }
+        Code = bitc::TYPE_CODE_OPAQUE;
 
         // Emit the name if it is present.
         if (!ST->getName().empty())
