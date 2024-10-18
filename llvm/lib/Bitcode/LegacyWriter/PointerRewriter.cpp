@@ -29,7 +29,7 @@
 // for much longer time. This turns out to be fragile, breaking / requiring
 // special handling for many more instructions (like select or phi), while also
 // not correctly handling multiple (but differently typed) uses of the same
-// opaque pointer. To avoid that complexity, we simply emit a bitcase
+// opaque pointer. To avoid that complexity, we simply emit a bitcast
 // surrounding every use or definition of a typed value, keeping pointers opaque
 // for the rest of the function.
 //
@@ -104,6 +104,7 @@ static bool isNoopCast(const Value *V) {
 static void prependOperandBitcast(Module &M, Instruction *I, int Idx) {
   Value *V = I->getOperand(Idx);
   assert(V->getType()->isPointerTy() && "Expected a pointer operand");
+  assert(!isa<PHINode>(I) && "Cannot insert bitcasts before phi nodes");
 
   // Insert no-op bitcast
   Value *Cast = CastInst::Create(Instruction::BitCast, V, V->getType(), "", I);
@@ -118,7 +119,12 @@ static void prependBitcasts(Module &M, Value *V) {
   SmallVector<std::pair<Instruction *, unsigned>, 8> Worklist;
   for (Use &Use : V->uses()) {
     auto User = Use.getUser();
-    if (auto *I = dyn_cast<Instruction>(User))
+    if (isa<PHINode>(User)) {
+      // we can't insert before phi nodes, so rewrite the resulting value
+      // instead. to prevent multiple casts, only do this for the first arg.
+      if (Use.getOperandNo() == 0)
+        prependBitcasts(M, User);
+    } else if (auto *I = dyn_cast<Instruction>(User))
       Worklist.push_back({I, Use.getOperandNo()});
   }
 
