@@ -2563,21 +2563,6 @@ void ModuleBitcodeWriter50::writeInstruction(const Instruction &I,
     }
     break;
 
-  case Instruction::FNeg: {
-    // emit as "fsub -0, value"
-    Code = bitc::FUNC_CODE_INST_BINOP;
-    pushValue(ConstantFP::get(I.getOperand(0)->getType(), -0.0), InstID, Vals);
-    if (!pushValueAndType(I.getOperand(0), InstID, Vals))
-      AbbrevToUse = FUNCTION_INST_BINOP_ABBREV;
-    Vals.push_back(getEncodedBinaryOpcode(Instruction::FSub));
-    uint64_t Flags = getOptimizationFlags(&I);
-    if (Flags != 0) {
-      if (AbbrevToUse == FUNCTION_INST_BINOP_ABBREV)
-        AbbrevToUse = FUNCTION_INST_BINOP_FLAGS_ABBREV;
-      Vals.push_back(Flags);
-    }
-    break;
-  }
   case Instruction::GetElementPtr: {
     Code = bitc::FUNC_CODE_INST_GEP;
     AbbrevToUse = FUNCTION_INST_GEP_ABBREV;
@@ -2934,6 +2919,10 @@ void ModuleBitcodeWriter50::writeInstruction(const Instruction &I,
     break;
   case Instruction::Freeze: {
     llvm_unreachable("can not encode freeze instruction for LLVM 5.0");
+    break;
+  }
+  case Instruction::FNeg: {
+    llvm_unreachable("can not encode fneg instruction for LLVM 5.0");
     break;
   }
   case Instruction::CallBr:
