@@ -2987,6 +2987,10 @@ void ModuleBitcodeWriter70::writeInstruction(const Instruction &I,
     llvm_unreachable("can not encode freeze instruction for LLVM 7.0");
     break;
   }
+  case Instruction::FNeg: {
+    llvm_unreachable("can not encode fneg instruction for LLVM 5.0");
+    break;
+  }
   case Instruction::CallBr:
     llvm_unreachable("can not encode CallBr instruction for LLVM 7.0");
     break;
