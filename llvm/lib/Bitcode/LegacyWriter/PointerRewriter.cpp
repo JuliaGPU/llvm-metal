@@ -100,20 +100,22 @@ static bool isNoopCast(const Value *V) {
   return I->getOperand(0)->getType() == I->getType();
 }
 
-// prepend a single instruction's operand with a no-op bitcast
-static void prependOperandBitcast(Module &M, Instruction *I, int Idx) {
+// prepend an instruction's pointer operand with a no-op bitcast
+static void prependBitcast(Module &M, Instruction *I, int Idx) {
   Value *V = I->getOperand(Idx);
   assert(V->getType()->isPointerTy() && "Expected a pointer operand");
   assert(!isa<PHINode>(I) && "Cannot insert bitcasts before phi nodes");
 
   // Insert no-op bitcast
+  errs() << "Inserting bitcast before operand: " << *I << "\n";
   Value *Cast = CastInst::Create(Instruction::BitCast, V, V->getType(), "", I);
   I->setOperand(Idx, Cast);
 }
 
-// prepend all uses of a value with no-op bitcasts
-static void prependBitcasts(Module &M, Value *V) {
+// replace all uses of a value with no-op bitcasts
+static void replaceWithBitcast(Module &M, Value *V) {
   assert(V->getType()->isPointerTy() && "Expected a pointer value");
+  errs() << "Inserting bitcast before: " << *V << "\n";
 
   // Find all uses
   SmallVector<std::pair<Instruction *, unsigned>, 8> Worklist;
@@ -123,7 +125,7 @@ static void prependBitcasts(Module &M, Value *V) {
       // we can't insert before phi nodes, so rewrite the resulting value
       // instead. to prevent multiple casts, only do this for the first arg.
       if (Use.getOperandNo() == 0)
-        prependBitcasts(M, User);
+        replaceWithBitcast(M, User);
     } else if (auto *I = dyn_cast<Instruction>(User))
       Worklist.push_back({I, Use.getOperandNo()});
   }
@@ -132,11 +134,11 @@ static void prependBitcasts(Module &M, Value *V) {
   for (auto Item : Worklist) {
     Instruction *I = Item.first;
     int Idx = Item.second;
-    prependOperandBitcast(M, I, Idx);
+    prependBitcast(M, I, Idx);
   }
 }
 
-// append a single instruction's return value with a no-op bitcast
+// append a single instruction's pointer return value with a no-op bitcast
 static void appendBitcast(Module &M, Instruction *I) {
   assert(I->getType()->isPointerTy() &&
          "Expected a pointer-returning instruction");
@@ -161,7 +163,7 @@ bool bitcastGlobals(Module &M) {
 
   // Insert bitcasts
   for (GlobalVariable *GV : Worklist) {
-    prependBitcasts(M, GV);
+    replaceWithBitcast(M, GV);
   }
 
   return true;
@@ -195,16 +197,17 @@ bool bitcastInstructionOperands(Module &M) {
 
   // Add no-op bitcasts
   for (Instruction *I : Worklist) {
+    errs() << "Processing instruction: " << *I << "\n";
     if (auto *LI = dyn_cast<LoadInst>(I)) {
-      prependBitcasts(M, LI->getPointerOperand());
+      prependBitcast(M, LI, LI->getPointerOperandIndex());
     } else if (auto *SI = dyn_cast<StoreInst>(I)) {
-      prependBitcasts(M, SI->getPointerOperand());
+      prependBitcast(M, SI, SI->getPointerOperandIndex());
     } else if (auto *AI = dyn_cast<AtomicRMWInst>(I)) {
-      prependBitcasts(M, AI->getPointerOperand());
+      prependBitcast(M, AI, AI->getPointerOperandIndex());
     } else if (auto *AI = dyn_cast<AtomicCmpXchgInst>(I)) {
-      prependBitcasts(M, AI->getPointerOperand());
+      prependBitcast(M, AI, AI->getPointerOperandIndex());
     } else if (auto *GEP = dyn_cast<GetElementPtrInst>(I)) {
-      prependBitcasts(M, GEP->getPointerOperand());
+      prependBitcast(M, GEP, GEP->getPointerOperandIndex());
       appendBitcast(M, GEP);
     } else if (auto *AI = dyn_cast<AllocaInst>(I)) {
       appendBitcast(M, AI);
@@ -233,7 +236,7 @@ bool bitcastFunctionOperands(Module &M) {
           if (OldTy == NewTy)
             continue;
 
-          prependOperandBitcast(M, CI, Idx);
+          prependBitcast(M, CI, Idx);
         }
       }
     }
