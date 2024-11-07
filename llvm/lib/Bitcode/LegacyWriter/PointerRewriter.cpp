@@ -179,6 +179,10 @@ bool bitcastInstructionOperands(Module &M) {
           Worklist.push_back(LI);
         else if (auto *SI = dyn_cast<StoreInst>(&I))
           Worklist.push_back(SI);
+        else if (auto *AI = dyn_cast<AtomicRMWInst>(&I))
+          Worklist.push_back(AI);
+        else if (auto *AI = dyn_cast<AtomicCmpXchgInst>(&I))
+          Worklist.push_back(AI);
         else if (auto *GEP = dyn_cast<GetElementPtrInst>(&I))
           Worklist.push_back(GEP);
         else if (auto *AI = dyn_cast<AllocaInst>(&I))
@@ -195,6 +199,10 @@ bool bitcastInstructionOperands(Module &M) {
       prependBitcasts(M, LI->getPointerOperand());
     } else if (auto *SI = dyn_cast<StoreInst>(I)) {
       prependBitcasts(M, SI->getPointerOperand());
+    } else if (auto *AI = dyn_cast<AtomicRMWInst>(I)) {
+      prependBitcasts(M, AI->getPointerOperand());
+    } else if (auto *AI = dyn_cast<AtomicCmpXchgInst>(I)) {
+      prependBitcasts(M, AI->getPointerOperand());
     } else if (auto *GEP = dyn_cast<GetElementPtrInst>(I)) {
       prependBitcasts(M, GEP->getPointerOperand());
       appendBitcast(M, GEP);
@@ -258,6 +266,14 @@ PointerTypeMap PointerRewriter::buildPointerMap(const Module &M) {
           assert(isNoopCast(SI->getPointerOperand()));
           PointerMap[SI->getPointerOperand()] = TypedPointerType::get(
               SI->getValueOperand()->getType(), SI->getPointerAddressSpace());
+        } else if (auto *AI = dyn_cast<AtomicRMWInst>(&I)) {
+          assert(isNoopCast(AI->getPointerOperand()));
+          PointerMap[AI->getPointerOperand()] = TypedPointerType::get(
+              AI->getValOperand()->getType(), AI->getPointerAddressSpace());
+        } else if (auto *AI = dyn_cast<AtomicCmpXchgInst>(&I)) {
+          assert(isNoopCast(AI->getPointerOperand()));
+          PointerMap[AI->getPointerOperand()] = TypedPointerType::get(
+              AI->getNewValOperand()->getType(), AI->getPointerAddressSpace());
         } else if (auto *GEP = dyn_cast<GetElementPtrInst>(&I)) {
           assert(isNoopCast(GEP->getPointerOperand()));
           PointerMap[GEP->getPointerOperand()] = TypedPointerType::get(
