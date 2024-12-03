@@ -103,7 +103,7 @@ static bool isNoopCast(const Value *V) {
 // prepend an instruction's pointer operand with a no-op bitcast
 static void prependBitcast(Module &M, Instruction *I, int Idx) {
   Value *V = I->getOperand(Idx);
-  assert(V->getType()->isPointerTy() && "Expected a pointer operand");
+  assert(V->getType()->isPtrOrPtrVectorTy() && "Expected a pointer operand");
 
   // Create no-op bitcast
   auto *Cast = CastInst::Create(Instruction::BitCast, V, V->getType());
@@ -121,7 +121,7 @@ static void prependBitcast(Module &M, Instruction *I, int Idx) {
 
 // replace all uses of a value with no-op bitcasts
 static void replaceWithBitcast(Module &M, Value *V) {
-  assert(V->getType()->isPointerTy() && "Expected a pointer value");
+  assert(V->getType()->isPtrOrPtrVectorTy() && "Expected a pointer value");
 
   // Find all uses
   SmallVector<std::pair<Instruction *, unsigned>, 8> Worklist;
@@ -141,14 +141,15 @@ static void replaceWithBitcast(Module &M, Value *V) {
 
 // append a single instruction's pointer return value with a no-op bitcast
 static void appendBitcast(Module &M, Instruction *I) {
-  assert(I->getType()->isPointerTy() &&
+  assert(I->getType()->isPtrOrPtrVectorTy() &&
          "Expected a pointer-returning instruction");
 
   // Insert no-op bitcast
-  Instruction *Cast = CastInst::Create(Instruction::BitCast, I, I->getType(),
-                                       "", I->getNextNode());
+  Instruction *Cast = CastInst::Create(Instruction::BitCast, I, I->getType());
+  Cast->insertBefore(I->getNextNode());
+
   I->replaceAllUsesWith(Cast);
-  // HACK: undo the RAUW which messed with our input argument too
+  // HACK: undo the part of the RAUW which messed with our input argument
   Cast->setOperand(0, I);
 }
 
