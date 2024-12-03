@@ -104,11 +104,19 @@ static bool isNoopCast(const Value *V) {
 static void prependBitcast(Module &M, Instruction *I, int Idx) {
   Value *V = I->getOperand(Idx);
   assert(V->getType()->isPointerTy() && "Expected a pointer operand");
-  assert(!isa<PHINode>(I) && "Cannot insert bitcasts before phi nodes");
 
-  // Insert no-op bitcast
-  errs() << "Inserting bitcast before operand: " << *I << "\n";
-  Value *Cast = CastInst::Create(Instruction::BitCast, V, V->getType(), "", I);
+  // Create no-op bitcast
+  errs() << "Creating bitcast for operand: " << *I << "\n";
+  auto *Cast = CastInst::Create(Instruction::BitCast, V, V->getType());
+
+  if (auto *PHI = dyn_cast<PHINode>(I)) {
+    // we can't insert before phis, so rewrite in the incoming block instead
+    auto *BB = PHI->getIncomingBlock(Idx);
+    Cast->insertBefore(BB->getTerminator());
+  } else {
+    Cast->insertBefore(I);
+  }
+
   I->setOperand(Idx, Cast);
 }
 
@@ -121,12 +129,7 @@ static void replaceWithBitcast(Module &M, Value *V) {
   SmallVector<std::pair<Instruction *, unsigned>, 8> Worklist;
   for (Use &Use : V->uses()) {
     auto User = Use.getUser();
-    if (isa<PHINode>(User)) {
-      // we can't insert before phi nodes, so rewrite the resulting value
-      // instead. to prevent multiple casts, only do this for the first arg.
-      if (Use.getOperandNo() == 0)
-        replaceWithBitcast(M, User);
-    } else if (auto *I = dyn_cast<Instruction>(User))
+    if (auto *I = dyn_cast<Instruction>(User))
       Worklist.push_back({I, Use.getOperandNo()});
   }
 
