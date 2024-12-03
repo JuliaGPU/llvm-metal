@@ -701,7 +701,7 @@ uint64_t getAttrKindEncoding70(Attribute::AttrKind Kind) {
   case Attribute::SwiftSelf:
     return bitc::ATTR_KIND_SWIFT_SELF;
   case Attribute::UWTable:
-    return bitc::ATTR_KIND_UW_TABLE;
+    llvm_unreachable("uwtable attribute is not supported in 7.0");
   case Attribute::WriteOnly:
     return bitc::ATTR_KIND_WRITEONLY;
   case Attribute::ZExt:
@@ -1530,12 +1530,32 @@ void ModuleBitcodeWriter70::writeDISubrange(const DISubrange *N,
   Record.clear();
 }
 
+static void emitSignedInt64(SmallVectorImpl<uint64_t> &Vals, uint64_t V) {
+  if ((int64_t)V >= 0)
+    Vals.push_back(V << 1);
+  else
+    Vals.push_back((-V << 1) | 1);
+}
+
+static void emitWideAPInt(SmallVectorImpl<uint64_t> &Vals, const APInt &A) {
+  // We have an arbitrary precision integer value to write whose
+  // bit width is > 64. However, in canonical unsigned integer
+  // format it is likely that the high bits are going to be zero.
+  // So, we only write the number of active words.
+  unsigned NumWords = A.getActiveWords();
+  const uint64_t *RawData = A.getRawData();
+  for (unsigned i = 0; i < NumWords; i++)
+    emitSignedInt64(Vals, RawData[i]);
+}
+
 void ModuleBitcodeWriter70::writeDIEnumerator(const DIEnumerator *N,
                                             SmallVectorImpl<uint64_t> &Record,
                                             unsigned Abbrev) {
-  Record.push_back((N->isUnsigned() << 1) | N->isDistinct());
-  Record.push_back(rotateSign(N->getValue().getZExtValue()));
+  const uint64_t IsBigInt = 1 << 2;
+  Record.push_back(IsBigInt | (N->isUnsigned() << 1) | N->isDistinct());
+  Record.push_back(N->getValue().getBitWidth());
   Record.push_back(VE.getMetadataOrNullID(N->getRawName()));
+  emitWideAPInt(Record, N->getValue());
 
   Stream.EmitRecord(bitc::METADATA_ENUMERATOR, Record, Abbrev);
   Record.clear();
@@ -2252,13 +2272,6 @@ void ModuleBitcodeWriter70::writeSyncScopeNames() {
   Stream.ExitBlock();
 }
 
-static void emitSignedInt64(SmallVectorImpl<uint64_t> &Vals, uint64_t V) {
-  if ((int64_t)V >= 0)
-    Vals.push_back(V << 1);
-  else
-    Vals.push_back((-V << 1) | 1);
-}
-
 void ModuleBitcodeWriter70::writeConstants(unsigned FirstVal, unsigned LastVal,
                                          bool isGlobal) {
   if (FirstVal == LastVal) return;
@@ -2312,6 +2325,10 @@ void ModuleBitcodeWriter70::writeConstants(unsigned FirstVal, unsigned LastVal,
                         CONSTANTS_SETTYPE_ABBREV);
       Record.clear();
     }
+
+    if (LastTy->isPtrOrPtrVectorTy() ||
+        (LastTy->isArrayTy() && LastTy->getArrayElementType()->isPtrOrPtrVectorTy()))
+        llvm_unreachable("pointers in constants are not yet supported by the IR downgrader");
 
     if (const InlineAsm *IA = dyn_cast<InlineAsm>(V)) {
       Record.push_back(unsigned(IA->hasSideEffects()) |
@@ -2735,6 +2752,8 @@ void ModuleBitcodeWriter70::writeInstruction(const Instruction &I,
     const InvokeInst *II = cast<InvokeInst>(&I);
     const Value *Callee = II->getCalledOperand();
     FunctionType *FTy = II->getFunctionType();
+
+    llvm_unreachable("InvokeInst not yet supported by the IR downgrader");
 
     if (II->hasOperandBundles())
       writeOperandBundles(*II, InstID);
