@@ -106,7 +106,6 @@ static void prependBitcast(Module &M, Instruction *I, int Idx) {
   assert(V->getType()->isPointerTy() && "Expected a pointer operand");
 
   // Create no-op bitcast
-  errs() << "Creating bitcast for operand: " << *I << "\n";
   auto *Cast = CastInst::Create(Instruction::BitCast, V, V->getType());
 
   if (auto *PHI = dyn_cast<PHINode>(I)) {
@@ -123,7 +122,6 @@ static void prependBitcast(Module &M, Instruction *I, int Idx) {
 // replace all uses of a value with no-op bitcasts
 static void replaceWithBitcast(Module &M, Value *V) {
   assert(V->getType()->isPointerTy() && "Expected a pointer value");
-  errs() << "Inserting bitcast before: " << *V << "\n";
 
   // Find all uses
   SmallVector<std::pair<Instruction *, unsigned>, 8> Worklist;
@@ -200,7 +198,6 @@ bool bitcastInstructionOperands(Module &M) {
 
   // Add no-op bitcasts
   for (Instruction *I : Worklist) {
-    errs() << "Processing instruction: " << *I << "\n";
     if (auto *LI = dyn_cast<LoadInst>(I)) {
       prependBitcast(M, LI, LI->getPointerOperandIndex());
     } else if (auto *SI = dyn_cast<StoreInst>(I)) {
