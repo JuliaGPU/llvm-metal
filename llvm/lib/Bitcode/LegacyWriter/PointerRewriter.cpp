@@ -41,9 +41,12 @@
 // cannot be inferred from the IR.
 
 #include "PointerRewriter.h"
-#include "llvm/IR/Module.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/Instructions.h"
+#include "llvm/IR/IntrinsicInst.h"
+#include "llvm/IR/Intrinsics.h"
+#include "llvm/IR/LLVMContext.h"
+#include "llvm/IR/Module.h"
 #include "llvm/IR/TypedPointerType.h"
 using namespace llvm;
 
@@ -73,7 +76,151 @@ static bool demotePointerConstexprs(Module &M) {
 
 // determine the typed function type based on !arg_eltypes metadata
 static FunctionType *getTypedFunctionType(const Function *F) {
+  auto &Ctx = F->getContext();
   auto *FTy = F->getFunctionType();
+
+  // handle known intrinsics
+  if (F->isIntrinsic()) {
+    switch (F->getIntrinsicID()) {
+    case Intrinsic::vastart:
+      // void @llvm.va_start(i8* <arglist>)
+      return FunctionType::get(
+          Type::getVoidTy(Ctx),
+          {TypedPointerType::get(
+              Type::getInt8Ty(Ctx),
+              FTy->getParamType(0)->getPointerAddressSpace())},
+          false);
+    case Intrinsic::vaend:
+      // void @llvm.va_end(i8* <arglist>)
+      return FunctionType::get(
+          Type::getVoidTy(Ctx),
+          {TypedPointerType::get(
+              Type::getInt8Ty(Ctx),
+              FTy->getParamType(0)->getPointerAddressSpace())},
+          false);
+    case Intrinsic::vacopy:
+      // void @llvm.va_copy(i8* <destarglist>, i8* <srcarglist>)
+      return FunctionType::get(
+          Type::getVoidTy(Ctx),
+          {TypedPointerType::get(
+               Type::getInt8Ty(Ctx),
+               FTy->getParamType(0)->getPointerAddressSpace()),
+           TypedPointerType::get(
+               Type::getInt8Ty(Ctx),
+               FTy->getParamType(1)->getPointerAddressSpace())},
+          false);
+    case Intrinsic::gcroot:
+      // void @llvm.gcroot(i8** %ptrloc, i8* %metadata)
+      return FunctionType::get(
+          Type::getVoidTy(Ctx),
+          {TypedPointerType::get(
+               TypedPointerType::get(
+                   Type::getInt8Ty(Ctx),
+                   FTy->getParamType(0)->getPointerAddressSpace()),
+               FTy->getParamType(0)->getPointerAddressSpace()),
+           TypedPointerType::get(
+               Type::getInt8Ty(Ctx),
+               FTy->getParamType(1)->getPointerAddressSpace())},
+          false);
+    case Intrinsic::gcread:
+      // i8* @llvm.gcread(i8* %ObjPtr, i8** %Ptr)
+      return FunctionType::get(
+          TypedPointerType::get(Type::getInt8Ty(Ctx),
+                                FTy->getReturnType()->getPointerAddressSpace()),
+          {TypedPointerType::get(
+               Type::getInt8Ty(Ctx),
+               FTy->getParamType(0)->getPointerAddressSpace()),
+           TypedPointerType::get(
+               TypedPointerType::get(
+                   Type::getInt8Ty(Ctx),
+                   FTy->getParamType(1)->getPointerAddressSpace()),
+               FTy->getParamType(1)->getPointerAddressSpace())},
+          false);
+    case Intrinsic::gcwrite:
+      // void @llvm.gcwrite(i8* %P1, i8* %Obj, i8** %P2)
+      return FunctionType::get(
+          Type::getVoidTy(Ctx),
+          {TypedPointerType::get(
+               Type::getInt8Ty(Ctx),
+               FTy->getParamType(0)->getPointerAddressSpace()),
+           TypedPointerType::get(
+               Type::getInt8Ty(Ctx),
+               FTy->getParamType(1)->getPointerAddressSpace()),
+           TypedPointerType::get(
+               TypedPointerType::get(
+                   Type::getInt8Ty(Ctx),
+                   FTy->getParamType(2)->getPointerAddressSpace()),
+               FTy->getParamType(2)->getPointerAddressSpace())},
+          false);
+    case Intrinsic::returnaddress:
+      // i8* @llvm.returnaddress(i32 <level>)
+      return FunctionType::get(
+          TypedPointerType::get(Type::getInt8Ty(Ctx),
+                                FTy->getReturnType()->getPointerAddressSpace()),
+          {Type::getInt32Ty(Ctx)}, false);
+    case Intrinsic::addressofreturnaddress:
+      // i8* @llvm.addressofreturnaddress()
+      return FunctionType::get(
+          TypedPointerType::get(Type::getInt8Ty(Ctx),
+                                FTy->getReturnType()->getPointerAddressSpace()),
+          {}, false);
+    case Intrinsic::sponentry:
+      // i8* @llvm.sponentry()
+      return FunctionType::get(
+          TypedPointerType::get(Type::getInt8Ty(Ctx),
+                                FTy->getReturnType()->getPointerAddressSpace()),
+          {}, false);
+    case Intrinsic::frameaddress:
+      // i8* @llvm.frameaddress(i32 <level>)
+      return FunctionType::get(
+          TypedPointerType::get(Type::getInt8Ty(Ctx),
+                                FTy->getReturnType()->getPointerAddressSpace()),
+          {Type::getInt32Ty(Ctx)}, false);
+    case Intrinsic::stacksave:
+      // i8* @llvm.stacksave()
+      return FunctionType::get(
+          TypedPointerType::get(Type::getInt8Ty(Ctx),
+                                FTy->getReturnType()->getPointerAddressSpace()),
+          {}, false);
+    case Intrinsic::stackrestore:
+      // void @llvm.stackrestore(i8* %ptr)
+      return FunctionType::get(
+          Type::getVoidTy(Ctx),
+          {TypedPointerType::get(
+              Type::getInt8Ty(Ctx),
+              FTy->getParamType(0)->getPointerAddressSpace())},
+          false);
+    case Intrinsic::prefetch:
+      // void @llvm.prefetch(i8* <address>, i32 <rw>, i32 <locality>, i32 <cache
+      // type>)
+      return FunctionType::get(
+          Type::getVoidTy(Ctx),
+          {TypedPointerType::get(
+               Type::getInt8Ty(Ctx),
+               FTy->getParamType(0)->getPointerAddressSpace()),
+           Type::getInt32Ty(Ctx), Type::getInt32Ty(Ctx), Type::getInt32Ty(Ctx)},
+          false);
+    case Intrinsic::clear_cache:
+      // void @llvm.clear_cache(i8*, i8*)
+      return FunctionType::get(
+          Type::getVoidTy(Ctx),
+          {TypedPointerType::get(
+               Type::getInt8Ty(Ctx),
+               FTy->getParamType(0)->getPointerAddressSpace()),
+           TypedPointerType::get(
+               Type::getInt8Ty(Ctx),
+               FTy->getParamType(1)->getPointerAddressSpace())},
+          false);
+    case Intrinsic::thread_pointer:
+      // i8* @llvm.thread.pointer()
+      return FunctionType::get(
+          TypedPointerType::get(Type::getInt8Ty(Ctx),
+                                FTy->getReturnType()->getPointerAddressSpace()),
+          {}, false);
+    }
+  }
+
+  // look at the !arg_eltypes metadata
   MDNode *MD = F->getMetadata("arg_eltypes");
   if (!MD)
     return FTy;
